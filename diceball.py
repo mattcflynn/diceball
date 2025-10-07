@@ -249,7 +249,7 @@ def play_at_bat(pitcher_dice_pool):
         # 1. Check for streak-related modifiers
         if current_pitch_category != pitch_streak_type: # Streak is broken
             if pitch_streak_count >= 2:
-                setup_bonus = pitch_streak_count - 1
+                setup_bonus = min(pitch_streak_count - 1, 2)  # Cap the setup bonus at +2
                 difficulty_modifier = setup_bonus
                 print(f"\nA streak of {pitch_streak_count} {pitch_streak_type} pitches sets up the {current_pitch_category}! PITCH DIFFICULTY +{setup_bonus}!")
         else: # Streak continues
