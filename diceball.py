@@ -93,13 +93,15 @@ def get_hitter_pre_pitch_choices():
 def determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch):
     """Calculates the contact and power dice modifiers based on the hitter's choices."""
     contact_mod, power_mod, contact_roll_bonus = 0, 0, 0
+    # This function is now only for the "shifted sit" or incorrect "hard sit"
     if hitter_approach == 's':
         if hitter_sit_guess.upper() == chosen_pitch:
-            print("Hitter sat and guessed right! BONUS: +1 to all Contact die rolls.")
+            # This is the reward for a successful "shifted sit"
+            print("Hitter successfully shifted their sit! BONUS: +1 to all Contact die rolls.")
             contact_roll_bonus = 1
         else:  # Sat and guessed wrong
-            print("Hitter was sitting on the wrong pitch! PENALTY: -1 to all Contact die rolls.")
-            contact_roll_bonus = -1
+            print("Hitter sat on the wrong pitch! PENALTY: -1 Contact Die, -1 Power Die.")
+            contact_mod, power_mod = -1, -1
     # If approach is 'w' (wait), mods remain 0, which is the neutral baseline.
     return contact_mod, power_mod, contact_roll_bonus
 
@@ -201,12 +203,37 @@ def play_at_bat(pitcher_dice_pool):
             streak_name = "Fastball" if pitch_streak_type == "FB" else "Off-speed"
             print(f"Current Pitcher Streak: {pitch_streak_count} {streak_name} pitch(es).")
         
+        # --- HITTER'S INITIAL APPROACH ---
         hitter_approach, hitter_sit_guess, swing_type = get_hitter_pre_pitch_choices()
+        is_hard_sit = hitter_approach == 's'
 
         # Pitcher's Turn
         print("\nPitcher is winding up... rolls the dice!")
         pitcher_dice = roll_dice(pitcher_dice_pool)
         display_dice(pitcher_dice)
+
+        # --- NEW: HITTER'S SIT ADJUSTMENT PHASE ---
+        if is_hard_sit:
+            print(f"\nHitter, you are currently 'hard sitting' on {hitter_sit_guess.upper()}.")
+            shift_choice = get_validated_input(
+                "Seeing the initial dice, do you want to [k]eep your sit or [sh]ift it? ",
+                ['k', 'sh']
+            )
+            if shift_choice == 'sh':
+                is_hard_sit = False # No longer a hard sit, payoff is smaller
+                hitter_sit_guess = get_validated_input(
+                    "What pitch are you shifting your sit to? [fb], [cb], or [cu]: ",
+                    ['fb', 'cb', 'cu']
+                )
+                print(f"Hitter has shifted their focus to {hitter_sit_guess.upper()}.")
+
+        # Pre-calculate hard sit bonuses to be applied later
+        hard_sit_contact_bonus = 0
+        hard_sit_power_die_bonus = 0
+        if is_hard_sit:
+            # We check for success later, but define the potential bonus now
+            hard_sit_contact_bonus = 2
+            hard_sit_power_die_bonus = 1
         
         # --- PUBLIC PITCHER RE-ROLL DECISION ---
         print("\nPitcher, publicly declare which dice you will re-roll.")
@@ -293,7 +320,19 @@ def play_at_bat(pitcher_dice_pool):
             if pitch_result == "STRIKE": strikes += 1; print("\nHitter takes for a called STRIKE!")
             else: balls += 1; print("\nHitter takes for a BALL!")
         else: # Hitter Swings
-            contact_mod, power_mod, contact_roll_bonus = determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch)
+            contact_mod, power_mod, contact_roll_bonus = 0, 0, 0
+            
+            if is_hard_sit:
+                if hitter_sit_guess.upper() == chosen_pitch:
+                    print(f"Hitter's hard sit on {hitter_sit_guess.upper()} paid off! HUGE BONUS!")
+                    contact_roll_bonus = hard_sit_contact_bonus
+                    power_mod += hard_sit_power_die_bonus
+                else:
+                    print(f"Hitter's hard sit on {hitter_sit_guess.upper()} was wrong! PENALTY: -1 Contact Die, -1 Power Die.")
+                    contact_mod, power_mod = -1, -1
+            else: # It was a 'wait' or a 'shifted sit'
+                contact_mod, power_mod, contact_roll_bonus = determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch)
+
             swing_result = resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_difficulty, bonus_dice)
             bonus_dice = 0 # Reset bonus dice after any swing attempt
 
