@@ -1,5 +1,6 @@
 import random
 import time
+from itertools import combinations
 
 # --- Game Configuration (Easy to Tune!) ---
 HITTER_BASE_DICE_POOL = 6  # Total dice to be allocated
@@ -112,7 +113,6 @@ def find_pitch_outcome(dice_pool, committed_pitch):
     highest_difficulty = -1
 
     # Find the best valid combo for the committed pitch
-    from itertools import combinations
     for combo in combinations(dice_pool, 3):
         if check_pitch_combo(list(combo), committed_pitch):
             difficulty = max(combo)
@@ -179,15 +179,13 @@ def resolve_swing(swing_type, contact_mod, power_mod, pitch_difficulty, bonus_di
 # --- Main Game Loop ---
 def play_at_bat(pitcher_dice_pool):
     balls, strikes, at_bat_over = 0, 0, False
-    pitcher_hand = ["FB", "CB", "CU"]
+    pitcher_hand, bonus_dice = ["FB", "CB", "CU"], 0
     
     print("========================================")
     print("      --== DICEBALL DUEL v3 ==--      ")
     print("========================================")
 
     while not at_bat_over:
-        # bonus_dice is defined here to persist across pitches within the same at-bat
-        # It will be reset to 0 only after a swing.
         print(f"\n--- NEW PITCH --- COUNT: {balls}-{strikes} ---")
         
         hitter_approach, hitter_sit_guess, swing_type = get_hitter_pre_pitch_choices()
@@ -282,7 +280,6 @@ def play_at_bat(pitcher_dice_pool):
 
 if __name__ == "__main__":
     while True:
-        bonus_dice = 0 # This is for the 'take' reward, needs to be passed into play_at_bat
         try:
             pitcher_dice_count_str = get_validated_input("Enter the number of dice for the pitcher (e.g., 4-7): ", ['4','5','6','7'])
             play_at_bat(int(pitcher_dice_count_str)) # We can add a loop here later for a full game
