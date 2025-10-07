@@ -151,17 +151,24 @@ def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_
     
     contact_roll_result = roll_dice(final_contact_dice)
     print(f"Hitter rolls for Contact... {contact_roll_result}")
+
+    # NEW: Check for the "Critical Hit" rule
+    is_critical_hit = contact_roll_result.count(6) >= 2
+    if is_critical_hit:
+        print("NATURAL 6s! A critical hit, the batter connects no matter the difficulty!")
+
     if contact_roll_bonus > 0:
         print(f"Applying BONUS of +{contact_roll_bonus} to each die from sitting on the right pitch!")
     elif contact_roll_bonus < 0:
         print(f"Applying PENALTY of {contact_roll_bonus} to each die from sitting on the wrong pitch!")
     time.sleep(1)
+
     successful_dice = sum(1 for die in contact_roll_result if (die + contact_roll_bonus) >= pitch_difficulty)
     
     print("\n...RESULT...")
     time.sleep(1)
 
-    if successful_dice >= 2:
+    if successful_dice >= 2 or is_critical_hit:
         print("BARRELED! Two or more dice meet the difficulty!")
         input("Barreled it! Press Enter for the Power roll...")
         power_roll_result = roll_dice(final_power_dice)
