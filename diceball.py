@@ -8,7 +8,7 @@ HITTER_BASE_DICE_POOL = 6  # Total dice to be allocated
 PITCH_REQUIREMENTS = {
     "FB": {"type": "3-of-a-kind", "name": "Fastball"},
     "CB": {"type": "3-die run", "name": "Curveball"},
-    "CU": {"type": "3 different odd dice", "name": "Changeup"}
+    "CU": {"type": "3 different odd or even dice", "name": "Changeup"}
 }
 
 # --- Helper Functions ---
@@ -51,7 +51,7 @@ def check_pitch_combo(dice_selection, pitch_type):
     if req == "3-die run":
         s_dice = sorted(dice_selection)
         return 6 not in s_dice and s_dice[0] + 1 == s_dice[1] and s_dice[1] + 1 == s_dice[2]
-    if req == "3 different odd dice": # Now "3 different odd OR 3 different even"
+    if req == "3 different odd or even dice":
         all_different = len(set(dice_selection)) == 3
         if not all_different: return False
         all_odd = all(d % 2 != 0 for d in dice_selection)
@@ -102,6 +102,30 @@ def determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch):
     # If approach is 'w' (wait), mods remain 0, which is the neutral baseline.
     
     return contact_mod, power_mod
+
+def find_pitch_outcome(dice_pool, committed_pitch):
+    """
+    Automatically finds the best possible version of the committed pitch.
+    Returns: (chosen_dice, difficulty, pitch_result)
+    """
+    best_combo = None
+    highest_difficulty = -1
+
+    # Find the best valid combo for the committed pitch
+    from itertools import combinations
+    for combo in combinations(dice_pool, 3):
+        if check_pitch_combo(list(combo), committed_pitch):
+            difficulty = max(combo)
+            if difficulty > highest_difficulty:
+                highest_difficulty = difficulty
+                best_combo = sorted(list(combo))
+
+    if best_combo:
+        return best_combo, highest_difficulty, "STRIKE"
+    else:
+        # If no valid combo, it's a failed pitch (ball). The difficulty is the highest 3 dice.
+        failed_attempt_dice = sorted(dice_pool, reverse=True)[:3]
+        return failed_attempt_dice, max(failed_attempt_dice), "BALL"
 
 def resolve_swing(swing_type, contact_mod, power_mod, pitch_difficulty, bonus_dice=0):
     """Handles the dice rolls for a hitter's swing and determines the outcome."""
@@ -162,8 +186,9 @@ def play_at_bat(pitcher_dice_pool):
     print("========================================")
 
     while not at_bat_over:
+        # bonus_dice is defined here to persist across pitches within the same at-bat
+        # It will be reset to 0 only after a swing.
         print(f"\n--- NEW PITCH --- COUNT: {balls}-{strikes} ---")
-        bonus_dice = 0 # This should be inside the loop but defined before it's potentially used.
         
         hitter_approach, hitter_sit_guess, swing_type = get_hitter_pre_pitch_choices()
 
@@ -172,20 +197,36 @@ def play_at_bat(pitcher_dice_pool):
         pitcher_dice = roll_dice(pitcher_dice_pool)
         display_dice(pitcher_dice)
         
-        # 4. Hitter's final swing decision is now made BEFORE the re-roll
-        final_swing_decision = "n"
-        re_roll_input = ""
+        # --- PUBLIC PITCHER RE-ROLL DECISION ---
+        print("\nPitcher, publicly declare which dice you will re-roll.")
+        re_roll_input = input("Choose dice to re-roll (e.g., '1 3 4') or press Enter: ")
 
-        try:
-            re_roll_input = input("Pitcher, choose dice to re-roll (e.g., '1 3 4') or press Enter: ")
-            
-            if hitter_approach != 't':
-                 final_swing_decision = get_validated_input(
-                     "\nHitter, seeing the initial dice and the pitcher's re-roll choice, will you [s]wing or [n]ot swing? ",
-                     ['s', 'n']
-                 )
+        # --- SIMULTANEOUS SECRET DECISION PHASE ---
+        print("\n--- Both players make their secret choice! ---")
+        # 1. Get Pitcher's secret pitch choice
+        chosen_pitch = get_validated_input(
+            "Pitcher, which pitch will you secretly commit to? [fb], [cb], or [cu]: ",
+            [p.lower() for p in pitcher_hand]
+        ).upper()
 
-            if re_roll_input:
+        # 2. Get Hitter's secret swing decision
+        final_swing_decision = "n" # Default to not swinging if taking
+        if hitter_approach != 't':
+            final_swing_decision = get_validated_input(
+                "\nHitter, will you secretly [s]wing or [n]ot swing? ",
+                ['s', 'n']
+            )
+        
+        # --- REVEAL AND EXECUTION ---
+        print("\n--- REVEAL! ---")
+        full_pitch_name = PITCH_REQUIREMENTS.get(chosen_pitch, {}).get("name", "Unknown")
+        print(f"Pitcher secretly committed to a {full_pitch_name}.")
+        print(f"Hitter chose to {'SWING' if final_swing_decision == 's' else 'NOT SWING'}.")
+        time.sleep(1)
+        
+        # Execute the re-roll
+        if re_roll_input:
+            try:
                 indices = [int(i) - 1 for i in re_roll_input.split()]
                 new_dice = roll_dice(len(indices))
                 for i, new_die in zip(indices, new_dice):
@@ -193,41 +234,17 @@ def play_at_bat(pitcher_dice_pool):
                 pitcher_dice.sort()
                 print("\nPitcher adjusts... the final dice are:")
                 display_dice(pitcher_dice)
-        except (ValueError, IndexError):
-            print("Invalid input. Keeping all dice.")
-
-        # Pitcher's Commitment
-        print("\nPitcher commits to a pitch...")
-        print(f"PITCHER'S HAND: {pitcher_hand}")
-        chosen_pitch = get_validated_input(
-            "Pitcher, choose a pitch from your hand: ",
-            [p.lower() for p in pitcher_hand]
-        ).upper()
-        
-        while True:
-            try:
-                dice_indices_str = input(f"Pitcher, choose 3 dice (e.g., '1 3 4') to form your {chosen_pitch}: ")
-                dice_indices = [int(i) - 1 for i in dice_indices_str.split()]
-                if len(dice_indices) != 3 or any(i<0 or i>=len(pitcher_dice) for i in dice_indices) or len(set(dice_indices)) != 3:
-                    print("Invalid selection. Must be 3 different dice."); continue
-                chosen_dice = [pitcher_dice[i] for i in dice_indices]
-                break
             except (ValueError, IndexError):
-                print("Invalid input.")
-        # 1. Pitcher's "Ball" Mechanic Change
-        is_valid_combo = check_pitch_combo(chosen_dice, chosen_pitch)
-        pitch_difficulty = min(chosen_dice) if not is_valid_combo else max(chosen_dice)
-        pitch_result = "STRIKE" if is_valid_combo else "BALL"
-        
-        print("\n--- THE PITCH ---")
-        full_pitch_name = PITCH_REQUIREMENTS.get(chosen_pitch, {}).get("name", "Unknown")
-        print(f"Pitcher throws a {full_pitch_name} using dice: {sorted(chosen_dice)}")
-        time.sleep(1)
-        
-        if is_valid_combo:
-            print(f"It's a valid combo! The pitch is a STRIKE. Pitch Difficulty is {pitch_difficulty} (the high die).")
+                print("Invalid re-roll input. Keeping all dice.")
+
+        # --- PITCH OUTCOME ---
+        # The game now automatically finds the best pitch outcome.
+        chosen_dice, pitch_difficulty, pitch_result = find_pitch_outcome(pitcher_dice, chosen_pitch)
+        print(f"\nPitcher's final dice for the {full_pitch_name} are {chosen_dice}.")
+        if pitch_result == "STRIKE":
+            print(f"It's a perfect {full_pitch_name}! A STRIKE with difficulty {pitch_difficulty} (the high die).")
         else:
-            print(f"Not a valid combo! The pitch is a BALL. Pitch Difficulty is {pitch_difficulty} (the low die).")
+            print(f"It's a failed {full_pitch_name}! A BALL with difficulty {pitch_difficulty} (the high die).")
         time.sleep(1)
 
         # --- Resolution ---
@@ -244,6 +261,7 @@ def play_at_bat(pitcher_dice_pool):
         else: # Hitter Swings
             contact_mod, power_mod = determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch)
             swing_result = resolve_swing(swing_type, contact_mod, power_mod, pitch_difficulty, bonus_dice)
+            bonus_dice = 0 # Reset bonus dice after any swing attempt
 
             if swing_result in ["SINGLE", "DOUBLE", "HR"]:
                 if swing_result == "HR": print("That ball is OBLITERATED! HOME RUN!")
@@ -264,8 +282,7 @@ def play_at_bat(pitcher_dice_pool):
 
 if __name__ == "__main__":
     while True:
-        # This variable is defined outside the loop to persist across at-bats if needed later
-        pitcher_dice_count = 0
+        bonus_dice = 0 # This is for the 'take' reward, needs to be passed into play_at_bat
         try:
             pitcher_dice_count_str = get_validated_input("Enter the number of dice for the pitcher (e.g., 4-7): ", ['4','5','6','7'])
             play_at_bat(int(pitcher_dice_count_str)) # We can add a loop here later for a full game
