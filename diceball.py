@@ -92,17 +92,16 @@ def get_hitter_pre_pitch_choices():
 
 def determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch):
     """Calculates the contact and power dice modifiers based on the hitter's choices."""
-    contact_mod, power_mod = 0, 0
+    contact_mod, power_mod, contact_roll_bonus = 0, 0, 0
     if hitter_approach == 's':
         if hitter_sit_guess.upper() == chosen_pitch:
-            print("Hitter sat and guessed right! BONUS: +1 Contact Die, +1 Power Die.")
-            contact_mod, power_mod = 1, 1
-        else: # Sat and guessed wrong
-            print("Hitter was sitting on the wrong pitch! PENALTY: -1 Contact Die, -1 Power Die.")
-            contact_mod, power_mod = -1, -1
+            print("Hitter sat and guessed right! BONUS: +1 to all Contact die rolls.")
+            contact_roll_bonus = 1
+        else:  # Sat and guessed wrong
+            print("Hitter was sitting on the wrong pitch! PENALTY: -1 to all Contact die rolls.")
+            contact_roll_bonus = -1
     # If approach is 'w' (wait), mods remain 0, which is the neutral baseline.
-    
-    return contact_mod, power_mod
+    return contact_mod, power_mod, contact_roll_bonus
 
 def find_pitch_outcome(dice_pool, committed_pitch):
     """
@@ -127,7 +126,7 @@ def find_pitch_outcome(dice_pool, committed_pitch):
         failed_attempt_dice = sorted(dice_pool, reverse=True)[:3]
         return failed_attempt_dice, max(failed_attempt_dice), "BALL"
 
-def resolve_swing(swing_type, contact_mod, power_mod, pitch_difficulty, bonus_dice=0):
+def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_difficulty, bonus_dice=0):
     """Handles the dice rolls for a hitter's swing and determines the outcome."""
     if swing_type == 'p': contact_dice, power_dice = 2, 4
     elif swing_type == 'c': contact_dice, power_dice = 4, 2
@@ -152,9 +151,12 @@ def resolve_swing(swing_type, contact_mod, power_mod, pitch_difficulty, bonus_di
     
     contact_roll_result = roll_dice(final_contact_dice)
     print(f"Hitter rolls for Contact... {contact_roll_result}")
+    if contact_roll_bonus > 0:
+        print(f"Applying BONUS of +{contact_roll_bonus} to each die from sitting on the right pitch!")
+    elif contact_roll_bonus < 0:
+        print(f"Applying PENALTY of {contact_roll_bonus} to each die from sitting on the wrong pitch!")
     time.sleep(1)
-    
-    successful_dice = sum(1 for die in contact_roll_result if die >= pitch_difficulty)
+    successful_dice = sum(1 for die in contact_roll_result if (die + contact_roll_bonus) >= pitch_difficulty)
     
     print("\n...RESULT...")
     time.sleep(1)
@@ -180,6 +182,7 @@ def resolve_swing(swing_type, contact_mod, power_mod, pitch_difficulty, bonus_di
 def play_at_bat(pitcher_dice_pool):
     balls, strikes, at_bat_over = 0, 0, False
     pitcher_hand, bonus_dice = ["FB", "CB", "CU"], 0
+    pitch_streak_type, pitch_streak_count = None, 0
     
     print("========================================")
     print("      --== DICEBALL DUEL v3 ==--      ")
@@ -187,6 +190,9 @@ def play_at_bat(pitcher_dice_pool):
 
     while not at_bat_over:
         print(f"\n--- NEW PITCH --- COUNT: {balls}-{strikes} ---")
+        if pitch_streak_count > 0:
+            streak_name = "Fastball" if pitch_streak_type == "FB" else "Off-speed"
+            print(f"Current Pitcher Streak: {pitch_streak_count} {streak_name} pitch(es).")
         
         hitter_approach, hitter_sit_guess, swing_type = get_hitter_pre_pitch_choices()
 
@@ -237,13 +243,36 @@ def play_at_bat(pitcher_dice_pool):
 
         # --- PITCH OUTCOME ---
         # The game now automatically finds the best pitch outcome.
+        difficulty_modifier = 0
+        current_pitch_category = "FB" if chosen_pitch == "FB" else "OFFSPEED"
+
+        # 1. Check for streak-related modifiers
+        if current_pitch_category != pitch_streak_type: # Streak is broken
+            if pitch_streak_count >= 2:
+                setup_bonus = pitch_streak_count - 1
+                difficulty_modifier = setup_bonus
+                print(f"\nA streak of {pitch_streak_count} {pitch_streak_type} pitches sets up the {current_pitch_category}! PITCH DIFFICULTY +{setup_bonus}!")
+        else: # Streak continues
+            if pitch_streak_count >= 2: # This is the 3rd or more consecutive pitch of this type
+                difficulty_modifier = -1
+                print(f"\nPitcher is getting predictable with {current_pitch_category} pitches! PITCH DIFFICULTY -1!")
+
         chosen_dice, pitch_difficulty, pitch_result = find_pitch_outcome(pitcher_dice, chosen_pitch)
+        pitch_difficulty += difficulty_modifier
+
         print(f"\nPitcher's final dice for the {full_pitch_name} are {chosen_dice}.")
         if pitch_result == "STRIKE":
-            print(f"It's a perfect {full_pitch_name}! A STRIKE with difficulty {pitch_difficulty} (the high die).")
+            print(f"It's a perfect {full_pitch_name}! A STRIKE with a final difficulty of {pitch_difficulty}.")
         else:
-            print(f"It's a failed {full_pitch_name}! A BALL with difficulty {pitch_difficulty} (the high die).")
+            print(f"It's a failed {full_pitch_name}! A BALL with a final difficulty of {pitch_difficulty}.")
         time.sleep(1)
+
+        # 2. Update the pitch streak for the next pitch
+        if current_pitch_category == pitch_streak_type:
+            pitch_streak_count += 1
+        else:
+            pitch_streak_type = current_pitch_category
+            pitch_streak_count = 1
 
         # --- Resolution ---
         if hitter_approach == 't': # Hitter committed to taking from the start
@@ -257,8 +286,8 @@ def play_at_bat(pitcher_dice_pool):
             if pitch_result == "STRIKE": strikes += 1; print("\nHitter takes for a called STRIKE!")
             else: balls += 1; print("\nHitter takes for a BALL!")
         else: # Hitter Swings
-            contact_mod, power_mod = determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch)
-            swing_result = resolve_swing(swing_type, contact_mod, power_mod, pitch_difficulty, bonus_dice)
+            contact_mod, power_mod, contact_roll_bonus = determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch)
+            swing_result = resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_difficulty, bonus_dice)
             bonus_dice = 0 # Reset bonus dice after any swing attempt
 
             if swing_result in ["SINGLE", "DOUBLE", "HR"]:
