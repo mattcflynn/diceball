@@ -170,16 +170,22 @@ def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_
     print("\n...RESULT...")
     time.sleep(1)
 
-    if successful_dice >= 2 or is_critical_hit:
-        print("BARRELED! Two or more dice meet the difficulty!")
-        input("Barreled it! Press Enter for the Power roll...")
+    if successful_dice >= 2 or is_critical_hit: # Ball is put in play!
+        print("CONTACT! The ball is in play!")
+        input("Press Enter for the Power roll to determine the outcome...")
         power_roll_result = roll_dice(final_power_dice)
         power_value = sum(power_roll_result)
         print(f"Hitter rolls for Power... {power_roll_result} = Sum: {power_value}")
         
-        if power_value >= 18: return "HR"
-        if power_value >= 13: return "DOUBLE"
-        return "SINGLE"
+        # New outcome table based on Power roll
+        if power_value >= 17: return "HR"
+        if power_value >= 14: return "DOUBLE"
+        if power_value >= 11: return "SINGLE"
+        if power_value >= 7:
+            print("A routine grounder to the infield...")
+            return "OUT"
+        print("A weak pop-up or dribbler...")
+        return "WEAK_OUT"
     elif successful_dice == 1:
         print("FOULED OFF! One die met the difficulty.")
         return "FOUL"
@@ -336,10 +342,12 @@ def play_at_bat(pitcher_dice_pool):
             swing_result = resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_difficulty, bonus_dice)
             bonus_dice = 0 # Reset bonus dice after any swing attempt
 
-            if swing_result in ["SINGLE", "DOUBLE", "HR"]:
+            if swing_result in ["SINGLE", "DOUBLE", "HR", "OUT", "WEAK_OUT"]:
                 if swing_result == "HR": print("That ball is OBLITERATED! HOME RUN!")
                 elif swing_result == "DOUBLE": print("Smoked into the gap! That's a DOUBLE!")
-                else: print("A sharp line drive for a SINGLE!")
+                elif swing_result == "SINGLE": print("A sharp line drive for a SINGLE!")
+                else: # It's an OUT or WEAK_OUT
+                    print("...and the defense makes the play! OUT!")
                 at_bat_over = True
             elif swing_result == "FOUL":
                 if strikes < 2: strikes += 1
