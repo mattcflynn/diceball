@@ -1,0 +1,10 @@
+[
+    {
+        "name": "Shohei Ohtani",
+        "stats": {
+            "power": 95,
+            "contact": 80
+        },
+        "pitches": ["FB", "CB", "CU"]
+    }
+]

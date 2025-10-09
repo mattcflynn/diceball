@@ -1,16 +1,6 @@
 import random
 import time
-from itertools import combinations
-
-# --- Game Configuration (Easy to Tune!) ---
-HITTER_BASE_DICE_POOL = 6  # Total dice to be allocated
-
-# Use FB, CB, CU for abbreviations
-PITCH_REQUIREMENTS = {
-    "FB": {"type": "3-of-a-kind", "name": "Fastball"},
-    "CB": {"type": "3-die run", "name": "Curveball"},
-    "CU": {"type": "3 different odd or even dice", "name": "Changeup"}
-}
+from game.pitch_utils import PITCH_REQUIREMENTS, check_pitch_combo, find_pitch_outcome
 
 # --- Helper Functions ---
 
@@ -42,23 +32,6 @@ def display_dice(dice_pool):
         lines[5] += f"    ({i+1})    "
     for line in lines:
         print(line)
-
-def check_pitch_combo(dice_selection, pitch_type):
-    """Checks if the 3 chosen dice form a valid pitch combo."""
-    if len(dice_selection) != 3: return False
-    req = PITCH_REQUIREMENTS.get(pitch_type, {}).get("type")
-    if req == "3-of-a-kind":
-        return dice_selection[0] == dice_selection[1] == dice_selection[2]
-    if req == "3-die run":
-        s_dice = sorted(dice_selection)
-        return 6 not in s_dice and s_dice[0] + 1 == s_dice[1] and s_dice[1] + 1 == s_dice[2]
-    if req == "3 different odd or even dice":
-        all_different = len(set(dice_selection)) == 3
-        if not all_different: return False
-        all_odd = all(d % 2 != 0 for d in dice_selection)
-        all_even = all(d % 2 == 0 for d in dice_selection)
-        return all_odd or all_even
-    return False
 
 def get_validated_input(prompt, valid_options):
     """Generic function to get validated user input."""
@@ -104,29 +77,6 @@ def determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch):
             contact_mod, power_mod = -1, -1
     # If approach is 'w' (wait), mods remain 0, which is the neutral baseline.
     return contact_mod, power_mod, contact_roll_bonus
-
-def find_pitch_outcome(dice_pool, committed_pitch):
-    """
-    Automatically finds the best possible version of the committed pitch.
-    Returns: (chosen_dice, difficulty, pitch_result)
-    """
-    best_combo = None
-    highest_difficulty = -1
-
-    # Find the best valid combo for the committed pitch
-    for combo in combinations(dice_pool, 3):
-        if check_pitch_combo(list(combo), committed_pitch):
-            difficulty = max(combo)
-            if difficulty > highest_difficulty:
-                highest_difficulty = difficulty
-                best_combo = sorted(list(combo))
-
-    if best_combo:
-        return best_combo, highest_difficulty, "STRIKE"
-    else:
-        # If no valid combo, it's a failed pitch (ball). The difficulty is the highest 3 dice.
-        failed_attempt_dice = sorted(dice_pool, reverse=True)[:3]
-        return failed_attempt_dice, max(failed_attempt_dice), "BALL"
 
 def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_difficulty, bonus_dice=0):
     """Handles the dice rolls for a hitter's swing and determines the outcome."""
@@ -360,20 +310,3 @@ def play_at_bat(pitcher_dice_pool):
             if balls >= 4: print("\nBALL FOUR! Take your base."); at_bat_over = True
 
     print("\n--- AT-BAT OVER ---")
-
-def main():
-    """Main function to run the Diceball game."""
-    while True:
-        try:
-            pitcher_dice_count_str = get_validated_input("Enter the number of dice for the pitcher (e.g., 4-7): ", ['4','5','6','7'])
-            play_at_bat(int(pitcher_dice_count_str))
-        except ValueError:
-            print("Invalid input. Please enter a number.")
-
-        play_again = get_validated_input("\nPlay another at-bat? [y]es or [n]o: ", ['y', 'n'])
-        if play_again == 'n':
-            print("Thanks for playing!")
-            break
-
-if __name__ == "__main__":
-    main()
