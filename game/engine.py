@@ -149,7 +149,7 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
     balls, strikes, at_bat_over = 0, 0, False
     pitcher_hand, bonus_dice = ["FB", "CB", "CU"], 0
     pitch_streak_type, pitch_streak_count = None, 0
-    
+
     print("========================================")
     print("      --== DICEBALL DUEL v3 ==--      ")
     print("========================================")
@@ -161,7 +161,10 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
             print(f"Current Pitcher Streak: {pitch_streak_count} {streak_name} pitch(es).")
         
         # --- HITTER'S INITIAL APPROACH ---
-        hitter_approach, hitter_sit_guess, swing_type = get_hitter_pre_pitch_choices()
+        # TODO: Add AI hitter logic here
+        hitter_approach, hitter_sit_guess, swing_type = get_hitter_pre_pitch_choices() # Assuming human hitter for now
+
+
         is_hard_sit = hitter_approach == 's'
 
         # Pitcher's Turn
@@ -192,29 +195,28 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
             hard_sit_contact_bonus = 2
             hard_sit_power_die_bonus = 1
         
-        re_roll_input = ""
-        chosen_pitch = ""
+        # --- PUBLIC PITCHER RE-ROLL DECISION ---
         if pitcher_is_ai:
+            # The AI makes both decisions (re-roll and pitch choice) at once.
             re_roll_input, chosen_pitch = make_pitcher_decision(
                 pitcher_dice, balls, strikes, pitch_streak_type, pitch_streak_count
             )
-            # Publicly announce the AI's re-roll decision
+            # Announce the public part of the AI's decision (the re-roll)
             if re_roll_input:
-                print(f"\nAI Pitcher publicly declares it will re-roll dice: {re_roll_input}")
+                print(f"\nThe AI pitcher will re-roll dice: {re_roll_input}")
             else:
-                print("\nAI Pitcher publicly declares it will not re-roll.")
+                print("\nThe AI pitcher will not re-roll any dice.")
+            print("--- AI pitcher has secretly chosen its pitch! ---")
         else:
-            # --- PUBLIC PITCHER RE-ROLL DECISION ---
+            # Human pitcher makes decisions in two steps
             print("\nPitcher, publicly declare which dice you will re-roll.")
             re_roll_input = input("Choose dice to re-roll (e.g., '1 3 4') or press Enter: ")
-
-            # --- SIMULTANEOUS SECRET DECISION PHASE ---
             print("\n--- Both players make their secret choice! ---")
-            # 1. Get Pitcher's secret pitch choice
             chosen_pitch = get_validated_input(
                 "Pitcher, which pitch will you secretly commit to? [fb], [cb], or [cu]: ",
                 [p.lower() for p in pitcher_hand]
             ).upper()
+
 
         # 2. Get Hitter's secret swing decision
         final_swing_decision = "n" # Default to not swinging if taking
@@ -321,5 +323,3 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
         if not at_bat_over:
             if strikes >= 3: print("\nSTRIKE THREE! You're out!"); at_bat_over = True
             if balls >= 4: print("\nBALL FOUR! Take your base."); at_bat_over = True
-
-    print("\n--- AT-BAT OVER ---")
