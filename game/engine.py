@@ -2,6 +2,7 @@ import random
 import time
 from game.pitch_utils import PITCH_REQUIREMENTS, check_pitch_combo, find_pitch_outcome
 from game.ai import make_pitcher_decision
+from game.bats import calculate_bats_probabilities
 
 # --- Helper Functions ---
 
@@ -74,8 +75,8 @@ def determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch):
             print("Hitter successfully shifted their sit! BONUS: +1 to all Contact die rolls.")
             contact_roll_bonus = 1
         else:  # Sat and guessed wrong
-            print("Hitter sat on the wrong pitch! PENALTY: -1 Contact Die, -1 Power Die.")
-            contact_mod, power_mod = -1, -1
+            print("Hitter sat on the wrong pitch! PENALTY: -1 to all Contact rolls, -1 Power Die.")
+            power_mod, contact_roll_bonus = -1, -1
     # If approach is 'w' (wait), mods remain 0, which is the neutral baseline.
     return contact_mod, power_mod, contact_roll_bonus
 
@@ -221,10 +222,42 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
         # 2. Get Hitter's secret swing decision
         final_swing_decision = "n" # Default to not swinging if taking
         if hitter_approach != 't':
-            final_swing_decision = get_validated_input(
-                "\nHitter, will you secretly [s]wing or [n]ot swing? ",
-                ['s', 'n']
-            )
+            while True:
+                swing_choice = get_validated_input(
+                    "\nHitter, will you secretly [s]wing, [n]ot swing, or use [b]ats? ",
+                    ['s', 'n', 'b']
+                )
+                if swing_choice == 'b':
+                    print("\n--- B.A.T.S. ACTIVATED ---")
+                    print("Calculating probabilities based on current game state...")
+                    
+                    # Determine potential modifiers for B.A.T.S. calculation.
+                    # This is complex because we don't know the pitch yet.
+                    # For now, we'll calculate based on a neutral 'wait' scenario
+                    # to give a baseline. A more advanced B.A.T.S. could show
+                    # outcomes for correct/incorrect sits.
+                    contact_mod_for_bats, power_mod_for_bats, contact_bonus_for_bats = 0, 0, 0
+                    if is_hard_sit:
+                        # For a hard sit, B.A.T.S. should ideally show two scenarios.
+                        # For simplicity, we'll show the penalty case as the "risk".
+                        print("B.A.T.S. showing probabilities assuming an INCORRECT hard sit.")
+                        contact_mod_for_bats, power_mod_for_bats = -1, -1
+
+                    # Run B.A.T.S.
+                    results = calculate_bats_probabilities(pitcher_dice, re_roll_input, swing_type, contact_mod_for_bats, power_mod_for_bats, contact_bonus_for_bats, bonus_dice, pitch_streak_type, pitch_streak_count, hitter_approach, hitter_sit_guess)
+                    
+                    # Display B.A.T.S. results
+                    print("\nB.A.T.S. Analysis (Estimated % Success):")
+                    print("-" * 70)
+                    print(f"{'Pitch Type':<12} | {'Pitch Success':>14} | {'Single':>8} | {'Double':>8} | {'Home Run':>10}")
+                    print("-" * 70)
+                    for pitch_type in ["FB", "CB", "CU"]:
+                        res = results[f"{pitch_type}_none"] # Simplified for non-bonus case
+                        print(f"{pitch_type:<12} | {res['pitch_success_prob']:>13.1%} | {res['single_prob']:>7.1%} | {res['double_prob']:>7.1%} | {res['hr_prob']:>9.1%}")
+                    print("-" * 70)
+                else:
+                    final_swing_decision = swing_choice
+                    break
         
         # --- REVEAL AND EXECUTION ---
         print("\n--- REVEAL! ---")
@@ -299,8 +332,8 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
                     contact_roll_bonus = hard_sit_contact_bonus
                     power_mod += hard_sit_power_die_bonus
                 else:
-                    print(f"Hitter's hard sit on {hitter_sit_guess.upper()} was wrong! PENALTY: -1 Contact Die, -1 Power Die.")
-                    contact_mod, power_mod = -1, -1
+                    print(f"Hitter's hard sit on {hitter_sit_guess.upper()} was wrong! PENALTY: -1 to all Contact rolls, -1 Power Die.")
+                    power_mod, contact_roll_bonus = -1, -1
             else: # It was a 'wait' or a 'shifted sit'
                 contact_mod, power_mod, contact_roll_bonus = determine_swing_modifiers(hitter_approach, hitter_sit_guess, chosen_pitch)
 
