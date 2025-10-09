@@ -1,6 +1,7 @@
 import random
 import time
 from game.pitch_utils import PITCH_REQUIREMENTS, check_pitch_combo, find_pitch_outcome
+from game.ai import make_pitcher_decision
 
 # --- Helper Functions ---
 
@@ -144,7 +145,7 @@ def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_
         return "MISS"
 
 # --- Main Game Loop ---
-def play_at_bat(pitcher_dice_pool):
+def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
     balls, strikes, at_bat_over = 0, 0, False
     pitcher_hand, bonus_dice = ["FB", "CB", "CU"], 0
     pitch_streak_type, pitch_streak_count = None, 0
@@ -191,17 +192,29 @@ def play_at_bat(pitcher_dice_pool):
             hard_sit_contact_bonus = 2
             hard_sit_power_die_bonus = 1
         
-        # --- PUBLIC PITCHER RE-ROLL DECISION ---
-        print("\nPitcher, publicly declare which dice you will re-roll.")
-        re_roll_input = input("Choose dice to re-roll (e.g., '1 3 4') or press Enter: ")
+        re_roll_input = ""
+        chosen_pitch = ""
+        if pitcher_is_ai:
+            re_roll_input, chosen_pitch = make_pitcher_decision(
+                pitcher_dice, balls, strikes, pitch_streak_type, pitch_streak_count
+            )
+            # Publicly announce the AI's re-roll decision
+            if re_roll_input:
+                print(f"\nAI Pitcher publicly declares it will re-roll dice: {re_roll_input}")
+            else:
+                print("\nAI Pitcher publicly declares it will not re-roll.")
+        else:
+            # --- PUBLIC PITCHER RE-ROLL DECISION ---
+            print("\nPitcher, publicly declare which dice you will re-roll.")
+            re_roll_input = input("Choose dice to re-roll (e.g., '1 3 4') or press Enter: ")
 
-        # --- SIMULTANEOUS SECRET DECISION PHASE ---
-        print("\n--- Both players make their secret choice! ---")
-        # 1. Get Pitcher's secret pitch choice
-        chosen_pitch = get_validated_input(
-            "Pitcher, which pitch will you secretly commit to? [fb], [cb], or [cu]: ",
-            [p.lower() for p in pitcher_hand]
-        ).upper()
+            # --- SIMULTANEOUS SECRET DECISION PHASE ---
+            print("\n--- Both players make their secret choice! ---")
+            # 1. Get Pitcher's secret pitch choice
+            chosen_pitch = get_validated_input(
+                "Pitcher, which pitch will you secretly commit to? [fb], [cb], or [cu]: ",
+                [p.lower() for p in pitcher_hand]
+            ).upper()
 
         # 2. Get Hitter's secret swing decision
         final_swing_decision = "n" # Default to not swinging if taking
