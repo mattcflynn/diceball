@@ -149,7 +149,7 @@ def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_
 def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
     balls, strikes, at_bat_over = 0, 0, False
     pitcher_hand, bonus_dice = ["FB", "CB", "CU"], 0
-    pitch_streak_type, pitch_streak_count = None, 0
+    pitch_streak_type, pitch_streak_count, pitcher_rerolls_remaining = None, 0, 10
 
     print("========================================")
     print("      --== DICEBALL DUEL v3 ==--      ")
@@ -157,6 +157,7 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
 
     while not at_bat_over:
         print(f"\n--- NEW PITCH --- COUNT: {balls}-{strikes} ---")
+        print(f"Pitcher has {pitcher_rerolls_remaining} re-rolls remaining this at-bat.")
         if pitch_streak_count > 0:
             streak_name = "Fastball" if pitch_streak_type == "FB" else "Off-speed"
             print(f"Current Pitcher Streak: {pitch_streak_count} {streak_name} pitch(es).")
@@ -200,7 +201,7 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
         if pitcher_is_ai:
             # The AI makes both decisions (re-roll and pitch choice) at once.
             re_roll_input, chosen_pitch = make_pitcher_decision(
-                pitcher_dice, balls, strikes, pitch_streak_type, pitch_streak_count
+                pitcher_dice, balls, strikes, pitch_streak_type, pitch_streak_count, pitcher_rerolls_remaining
             )
             # Announce the public part of the AI's decision (the re-roll)
             if re_roll_input:
@@ -210,8 +211,23 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
             print("--- AI pitcher has secretly chosen its pitch! ---")
         else:
             # Human pitcher makes decisions in two steps
-            print("\nPitcher, publicly declare which dice you will re-roll.")
-            re_roll_input = input("Choose dice to re-roll (e.g., '1 3 4') or press Enter: ")
+            re_roll_input = ""
+            if pitcher_rerolls_remaining > 0:
+                while True:
+                    print(f"\nPitcher, you have {pitcher_rerolls_remaining} re-rolls left.")
+                    re_roll_input = input("Choose dice to re-roll (e.g., '1 3 4') or press Enter: ")
+                    if not re_roll_input:
+                        break # Player chose not to re-roll
+                    
+                    num_to_reroll = len(re_roll_input.split())
+                    if num_to_reroll > pitcher_rerolls_remaining:
+                        print(f"Invalid choice. You only have {pitcher_rerolls_remaining} re-rolls left, but tried to use {num_to_reroll}.")
+                    else:
+                        break # Valid choice
+            else:
+                print("\nPitcher has no re-rolls remaining and cannot re-roll any dice.")
+                re_roll_input = ""
+
             print("\n--- Both players make their secret choice! ---")
             chosen_pitch = get_validated_input(
                 "Pitcher, which pitch will you secretly commit to? [fb], [cb], or [cu]: ",
@@ -268,6 +284,8 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
         
         # Execute the re-roll
         if re_roll_input:
+            num_rerolled = len(re_roll_input.split())
+            pitcher_rerolls_remaining -= num_rerolled
             try:
                 indices = [int(i) - 1 for i in re_roll_input.split()]
                 new_dice = roll_dice(len(indices))

@@ -2,7 +2,7 @@ from itertools import combinations
 from game.pitch_utils import check_pitch_combo
 import random
 
-def make_pitcher_decision(dice, balls, strikes, streak_type, streak_count):
+def make_pitcher_decision(dice, balls, strikes, streak_type, streak_count, rerolls_remaining):
     """
     Determines the AI pitcher's move, including re-roll and pitch commitment.
 
@@ -12,6 +12,7 @@ def make_pitcher_decision(dice, balls, strikes, streak_type, streak_count):
         strikes: Current strike count.
         streak_type: The type of the current pitch streak (e.g., "FB").
         streak_count: The length of the current pitch streak.
+        rerolls_remaining: How many dice the pitcher can re-roll this at-bat.
 
     Returns:
         A tuple containing (re_roll_input, chosen_pitch).
@@ -19,6 +20,11 @@ def make_pitcher_decision(dice, balls, strikes, streak_type, streak_count):
         chosen_pitch (str): The pitch the AI commits to (e.g., "FB").
     """
     print("\nAI Pitcher is thinking...")
+
+    # If no re-rolls are left, the AI cannot choose to re-roll.
+    if rerolls_remaining == 0:
+        print("AI has no re-rolls left, must play the hand as is.")
+        near_misses = [] # Effectively blocks re-roll logic
 
     # 1. Analyze hand for possible and near-miss pitches
     analysis = _analyze_dice(dice)
@@ -56,6 +62,11 @@ def make_pitcher_decision(dice, balls, strikes, streak_type, streak_count):
         if near_misses:
             best_potential_pitch = max(near_misses, key=lambda p: p['potential_difficulty'])
             # If potential is better than what we have, re-roll.
+            # NEW: Check if we have enough re-rolls for this move.
+            num_dice_to_reroll = len(best_potential_pitch['reroll_indices'].split())
+            if num_dice_to_reroll > rerolls_remaining:
+                return "", best_in_hand['type'] # Not enough re-rolls, stick with current hand
+
             if best_potential_pitch['potential_difficulty'] > best_in_hand['difficulty']:
                 return best_potential_pitch['reroll_indices'], best_potential_pitch['type']
 
@@ -66,6 +77,10 @@ def make_pitcher_decision(dice, balls, strikes, streak_type, streak_count):
     else:
         # If there are ways to make a pitch, choose the best one to aim for.
         if near_misses:
+            # Filter out any near-misses that require more re-rolls than we have
+            near_misses = [p for p in near_misses if len(p['reroll_indices'].split()) <= rerolls_remaining]
+            if not near_misses: return "1 2 3", "FB" # Disaster recovery if no valid re-rolls
+
             # Conservative: Aim for the easiest pitch to complete.
             if aggressiveness == "conservative":
                 # FB is generally easiest, then CU. Prioritize those.
