@@ -93,11 +93,11 @@ def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_
             ['c', 'p']
         )
         if bonus_allocation == 'c':
-            contact_dice += bonus_dice
+            contact_dice += 1
         else:
-            power_dice += bonus_dice
+            power_dice += 1
 
-    final_contact_dice = max(0, contact_dice + contact_mod)
+    final_contact_dice = max(0, contact_dice + contact_mod) 
     final_power_dice = max(0, power_dice + power_mod)
 
     print(f"\nHitter is swinging with {final_contact_dice} Contact Dice and {final_power_dice} Power Dice!")
@@ -246,31 +246,29 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False):
                 if swing_choice == 'b':
                     print("\n--- B.A.T.S. ACTIVATED ---")
                     print("Calculating probabilities based on current game state...")
-                    
-                    # Determine potential modifiers for B.A.T.S. calculation.
-                    # This is complex because we don't know the pitch yet.
-                    # For now, we'll calculate based on a neutral 'wait' scenario
-                    # to give a baseline. A more advanced B.A.T.S. could show
-                    # outcomes for correct/incorrect sits.
-                    contact_mod_for_bats, power_mod_for_bats, contact_bonus_for_bats = 0, 0, 0
                     if is_hard_sit:
-                        # For a hard sit, B.A.T.S. should ideally show two scenarios.
-                        # For simplicity, we'll show the penalty case as the "risk".
-                        print("B.A.T.S. showing probabilities assuming an INCORRECT hard sit.")
-                        contact_mod_for_bats, power_mod_for_bats = -1, -1
+                        print(f"B.A.T.S. is analyzing outcomes based on your hard sit on {hitter_sit_guess.upper()}.")
 
                     # Run B.A.T.S.
-                    results = calculate_bats_probabilities(pitcher_dice, re_roll_input, swing_type, contact_mod_for_bats, power_mod_for_bats, contact_bonus_for_bats, bonus_dice, pitch_streak_type, pitch_streak_count, hitter_approach, hitter_sit_guess)
+                    # The B.A.T.S. function now handles all modifier logic internally.
+                    results = calculate_bats_probabilities(pitcher_dice, re_roll_input, swing_type, 0, 0, 0, bonus_dice, pitch_streak_type, pitch_streak_count, hitter_approach, hitter_sit_guess)
                     
                     # Display B.A.T.S. results
-                    print("\nB.A.T.S. Analysis (Estimated % Success):")
-                    print("-" * 70)
-                    print(f"{'Pitch Type':<12} | {'Pitch Success':>14} | {'Single':>8} | {'Double':>8} | {'Home Run':>10}")
-                    print("-" * 70)
-                    for pitch_type in ["FB", "CB", "CU"]:
-                        res = results[f"{pitch_type}_none"] # Simplified for non-bonus case
-                        print(f"{pitch_type:<12} | {res['pitch_success_prob']:>13.1%} | {res['single_prob']:>7.1%} | {res['double_prob']:>7.1%} | {res['hr_prob']:>9.1%}")
-                    print("-" * 70)
+                    print("\nB.A.T.S. Analysis:")
+                    header = f"{'Pitch-Diff':<12} | {'Pitch %':>8} | {'Contact %':>10}"
+                    print("-" * len(header))
+                    print(header)
+                    print("-" * len(header))
+                    for res in results:
+                        print(f"{res['pitch_id']:<12} | {res['pitch_prob']:>7.1%} | {res['contact_prob']:>9.1%}")
+                    print("-" * len(header))
+                    
+                    # Display the independent hit probabilities
+                    if results:
+                        power_probs = results[0]['power_probs']
+                        print("\nHit % (if contact is made):")
+                        print(f"  Single: {power_probs['SINGLE']:.1%}, Double: {power_probs['DOUBLE']:.1%}, HR: {power_probs['HR']:.1%}")
+
                 else:
                     final_swing_decision = swing_choice
                     break
