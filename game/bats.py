@@ -5,8 +5,7 @@ from game.pitch_utils import find_pitch_outcome, check_pitch_combo
 def _get_swing_dice(swing_type, bonus_dice_allocation):
     """Determines the base number of contact and power dice for a swing."""
     if swing_type == 'p': contact_dice, power_dice = 2, 4
-    elif swing_type == 'c': contact_dice, power_dice = 4, 2
-    else: contact_dice, power_dice = 3, 3
+    else: contact_dice, power_dice = 4, 2
 
     if bonus_dice_allocation == 'c': contact_dice += 1
     elif bonus_dice_allocation == 'p': power_dice += 1
@@ -29,21 +28,23 @@ def _simulate_contact_prob(contact_dice, contact_roll_bonus, pitch_difficulty):
 
     return successful_outcomes / total_outcomes
 
-def _calculate_power_probs(power_dice):
+def _calculate_power_probs(power_dice, swing_type='p'):
     """Calculates the probability of hitting a SINGLE, DOUBLE, or HR."""
     if power_dice <= 0: return {"SINGLE": 0, "DOUBLE": 0, "HR": 0}
 
-    # Generate all possible outcomes for the power roll
     possible_rolls = product(range(1, 7), repeat=power_dice)
     total_outcomes = 6 ** power_dice
-    
+
     single_count, double_count, hr_count = 0, 0, 0
 
     for roll in possible_rolls:
         power_value = sum(roll)
-        if power_value >= 17: hr_count += 1
-        elif power_value >= 14: double_count += 1
-        elif power_value >= 11: single_count += 1
+        if swing_type == 'p':
+            if power_value >= 19: hr_count += 1
+            elif power_value >= 16: double_count += 1
+            elif power_value >= 14: single_count += 1
+        else:  # contact swing
+            if power_value >= 10: single_count += 1
 
     return {
         "SINGLE": single_count / total_outcomes,
@@ -93,7 +94,8 @@ def _get_estimated_difficulty(pitcher_dice, pitch_type):
 
 def calculate_bats_probabilities(
     pitcher_dice, re_roll_input, swing_type, contact_mod, power_mod, contact_roll_bonus,
-    bonus_dice, pitch_streak_type, pitch_streak_count, hitter_approach, hitter_sit_guess
+    bonus_dice, pitch_streak_type, pitch_streak_count, hitter_approach, hitter_sit_guess,
+    gas_remaining=0
 ):
     """
     Calculates and displays the B.A.T.S. probabilities for the hitter.
@@ -102,8 +104,10 @@ def calculate_bats_probabilities(
     kept_dice = []
     all_indices = list(range(len(pitcher_dice)))
     reroll_indices = []
-    if re_roll_input:
+    if re_roll_input and gas_remaining > 0:
         reroll_indices = [int(i) - 1 for i in re_roll_input.split()]
+        # Cap re-rolls to available gas
+        reroll_indices = reroll_indices[:gas_remaining]
 
     for i in all_indices:
         if i not in reroll_indices:
@@ -134,7 +138,7 @@ def calculate_bats_probabilities(
         final_contact_dice = max(0, base_contact + current_contact_mod)
         final_power_dice = max(0, base_power + current_power_mod)
 
-        power_probs = _calculate_power_probs(final_power_dice)
+        power_probs = _calculate_power_probs(final_power_dice, swing_type)
 
         # --- Calculate Pitch Probabilities by Difficulty ---
         pitch_difficulty_probs = _calculate_pitch_difficulty_probs(kept_dice, num_reroll, pitch_type)

@@ -43,6 +43,6 @@ def find_pitch_outcome(dice_pool, committed_pitch):
     if best_combo:
         return best_combo, highest_difficulty, "STRIKE"
     else:
-        # If no valid combo, it's a failed pitch (ball). The difficulty is the highest 3 dice.
+        # If no valid combo, it's a failed pitch (ball). Difficulty is median of top 3 dice.
         failed_attempt_dice = sorted(dice_pool, reverse=True)[:3]
         return failed_attempt_dice, max(failed_attempt_dice), "BALL"
