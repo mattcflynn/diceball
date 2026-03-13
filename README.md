@@ -24,12 +24,10 @@ You'll be asked:
 Each pitch follows this sequence:
 
 ```
-1. Hitter chooses approach and swing type (secretly)
-2. Pitcher rolls dice (shown publicly)
-3. Hitter sees the dice and may adjust their sit
-4. Pitcher decides on re-rolls (public), commits to pitch type (secret)
-5. Hitter decides to swing or not (secret)
-6. Reveal — everything resolves simultaneously
+1. Pitcher rolls dice (shown publicly)
+2. Pitcher decides on re-rolls (public, costs gas), commits to pitch type (secret)
+3. Hitter sees the dice and re-roll plan, then commits to a pitch type and swing type (secret)
+4. Reveal — everything resolves simultaneously
 ```
 
 ---
@@ -58,51 +56,36 @@ If the committed pitch type can't be formed from the final dice, the pitch is a 
 
 ### Gas Tokens 🔥
 
-- Pitcher starts each at-bat with **0 gas**.
-- After each pitch resolves, the pitcher earns **+1 gas** (max 2).
+- Pitcher starts each at-bat with **gas based on dice count**: 5 dice → 1 gas, 4 dice → 2 gas.
+- Gas is **spent down** over the at-bat — it's not refilled. The pitcher weakens over a long at-bat.
 - Gas is spent to **re-roll dice**: 1 gas per die re-rolled.
 - Re-roll intent is **public** — the hitter sees which dice are being replaced.
 - Re-rolls happen before the pitch is thrown; the new dice are shown to both players.
 
-> First pitch always has 0 gas — no re-rolls available. Gas builds up over the at-bat.
+> First pitch: pitcher uses whatever gas they have. A 5-dice pitcher has 1 gas; a 4-dice pitcher has 2.
 
 ---
 
 ## Hitter Mechanics
 
-### Approach (chosen before pitcher rolls)
+### Post-Dice Commit
 
-| Choice | Key | Effect |
-|--------|-----|--------|
-| **Take** | `t` | Don't swing no matter what. Earn a +1 bonus die on your next swing. |
-| **Sit** | `s` | Declare a pitch you're looking for. Bonus if right, penalty if wrong. |
-| **Wait** | `w` | Neutral. Decide to swing or not after seeing the dice. |
+After seeing the pitcher's dice and re-roll plan, the hitter **commits to a pitch type** they're swinging at:
 
-### Sit Mechanic
+- **Correct commit** (`fb`, `cb`, or `cu` matches the pitcher's actual pitch): **+1 to every contact die roll**
+- **Wrong commit**: **−1 to every contact die roll**
+- **Take** (`n`): Don't swing. No bonus — just working the count.
 
-When you **hard sit** on a pitch (`s`), you commit before the dice are rolled:
+You can also press `b` to run **B.A.T.S.** before deciding (see below).
 
-- **Correct sit:** +2 to every contact die roll
-- **Wrong sit:** −1 to every contact die roll, −1 power die
+### Swing Type
 
-After the pitcher rolls, you get one chance to **keep** your sit or **shift** it to a different pitch:
-- Shifted sit (if correct): +1 to every contact die roll
-- Shifted sit (if wrong): −1 contact, −1 power (same penalty)
-
-### Swing Type (chosen alongside approach)
-
-You choose between two swings — the tradeoff is contact reliability vs. power ceiling:
+You choose your swing type when you commit:
 
 | Type | Key | Contact Dice | Power Dice | Best for |
 |------|-----|-------------|------------|---------|
-| **Power** | `p` | 2 | 4 | Going for extra-base hits; lower contact rate but HR possible |
-| **Contact** | `c` | 4 | 2 | Putting the ball in play; higher contact rate but no HRs or doubles |
-
-> Against a high-difficulty pitch (5 or 6), contact swing is often the right call — 4 contact dice vs. 2 makes a big difference. Against easier pitches in a hitter's count, power is the play.
-
-### Bonus Die
-
-Taking a pitch (approach `t`) awards a **+1 bonus die** on your next swing. You choose to add it to contact or power dice when you swing.
+| **Power** | `p` | 2 | 4 | Going for extra-base hits; lower contact rate but HR/TRIPLE possible |
+| **Contact** | `c` | 4 | 2 | Putting the ball in play; higher contact rate, hard line drives |
 
 ---
 
@@ -110,7 +93,7 @@ Taking a pitch (approach `t`) awards a **+1 bonus die** on your next swing. You 
 
 Roll your contact dice. You make contact if **2 or more dice meet or exceed the pitch difficulty**.
 
-- Sit bonus/penalty applies: add the modifier to every die before comparing.
+- Commit bonus/penalty applies: add the modifier to every die before comparing.
 - **Critical Hit:** Two or more natural 6s always make contact, regardless of difficulty.
 
 ---
@@ -123,21 +106,23 @@ Sum all power dice. The result depends on swing type:
 
 | Sum | Result |
 |-----|--------|
-| ≥ 19 | **Home Run** |
-| ≥ 16 | **Double** |
-| ≥ 14 | **Single** |
-| ≥ 7 | **Out** |
+| ≥ 20 | **Home Run** |
+| = 19 | **Triple** |
+| = 18 | **Double** |
+| 16–17 | **Single** |
+| 7–15 | **Out** |
 | < 7 | **Weak Out** |
 
 ### Contact swing (2 power dice)
 
 | Sum | Result |
 |-----|--------|
-| ≥ 10 | **Single** |
-| ≥ 6 | **Out** |
+| = 12 | **Double** (max roll — a laser line drive) |
+| 10–11 | **Single** |
+| 6–9 | **Out** |
 | < 6 | **Weak Out** |
 
-*No HRs or doubles are possible with a contact swing — max sum of 2 dice is 12.*
+*No HRs or triples are possible with a contact swing — it's all about putting the ball in play.*
 
 ---
 
@@ -156,7 +141,7 @@ The pitcher's last two (or more) pitches of the same **category** (FB vs. off-sp
 
 ## B.A.T.S. (Batting Analysis & Targeting System)
 
-When it's your turn to swing or not, press `b` to run **B.A.T.S.** It shows the probability of each pitch type at each difficulty level, and your contact probability against each — given the current dice, re-rolls, streak, and your approach/sit.
+When it's your turn to commit, press `b` to run **B.A.T.S.** It shows the probability of each pitch type at each difficulty level, and your contact probability against each — given the current dice, re-rolls, streak, and your committed pitch.
 
 ```
 Pitch-Diff   |  Pitch %  |  Contact %
@@ -166,7 +151,7 @@ CB-3         |    14.7%  |    71.4%
 ...
 ```
 
-Power probabilities (HR/2B/1B) are also shown if contact is made. B.A.T.S. doesn't consume your turn.
+Power probabilities (HR/Triple/2B/1B) are also shown if contact is made. B.A.T.S. doesn't consume your turn.
 
 ---
 
@@ -174,7 +159,7 @@ Power probabilities (HR/2B/1B) are also shown if contact is made. B.A.T.S. doesn
 
 - **3 strikes** → Strikeout. Swinging (K_S) or looking (K_L).
 - **4 balls** → Walk (BB).
-- **Contact** → Single, Double, HR, Out, or Weak Out ends the at-bat immediately.
+- **Contact** → Single, Double, Triple, HR, Out, or Weak Out ends the at-bat immediately.
 - Foul balls add a strike only if the count is below 2 strikes.
 
 ---
@@ -183,12 +168,12 @@ Power probabilities (HR/2B/1B) are also shown if contact is made. B.A.T.S. doesn
 
 | | 4 dice | 5 dice |
 |--|--------|--------|
-| Walk rate | ~11% | ~8% |
-| Strikeout rate | ~25% | ~22% |
-| Batting average | ~.262 | ~.276 |
-| Variance | High — pitches are less predictable | Lower — pitcher is more consistent |
+| Walk rate | ~13% | ~6% |
+| Batting average | ~.240 | ~.251 |
+| Gas budget | 2 | 1 |
+| Variance | High — pitches are less predictable | Lower — pitcher is more controlled |
 
-A 4-dice pitcher throws more balls (harder to form valid combos), but is also less predictable. The hitter can't read the situation as cleanly, leading to more swing-and-misses on unexpectedly hard pitches. A 5-dice pitcher is more controlled: fewer walks, more reliable pitch formation.
+A 4-dice pitcher throws more balls (harder to form valid combos) and has 2 gas to compensate — but still walks more batters. A 5-dice pitcher is more controlled with 1 gas.
 
 ---
 
@@ -203,22 +188,22 @@ PITCH TYPES
 CONTACT  2+ dice ≥ difficulty  (or two natural 6s)
 
 POWER SWING (4p)        CONTACT SWING (2p)
-  ≥19 HR                  ≥10 Single
-  ≥16 Double              ≥6  Out
-  ≥14 Single              <6  Weak Out
-  ≥7  Out
+  ≥20 HR                  =12 Double (max roll)
+  =19 Triple              10-11 Single
+  =18 Double              6-9 Out
+  16-17 Single            <6 Weak Out
+  7-15 Out
   <7  Weak Out
 
 SWING TYPES      Contact  Power
-  Power (p)         2       4    ← HRs possible
-  Contact (c)       4       2    ← No HRs, but hard to miss
+  Power (p)         2       4    ← HRs/Triples possible
+  Contact (c)       4       2    ← Hard line drives
 
-SIT RESULT
-  Hard sit correct  +2 contact bonus
-  Hard sit wrong    -1 contact, -1 power die
-  Shifted correct   +1 contact bonus
-  Shifted wrong     -1 contact, -1 power die
+COMMIT (after seeing dice)
+  Right pitch  +1 to every contact die
+  Wrong pitch  -1 to every contact die
+  Take (n)     No swing. Working the count.
 
-GAS 🔥  Earns 1 per pitch (max 2). 1 gas = re-roll 1 die.
-TAKE    No swing. Earn +1 bonus die on next swing.
+GAS 🔥  5 dice → 1 gas, 4 dice → 2 gas. Spent down, not refilled.
+       1 gas = re-roll 1 die (public).
 ```

@@ -39,7 +39,7 @@ def run_simulation(num_at_bats: int, pitcher_dice: int | None = None) -> dict:
 
 
 def print_report(results: dict, pitch_totals: list, num_at_bats: int, pitcher_dice: int | None):
-    hits = results.get("SINGLE", 0) + results.get("DOUBLE", 0) + results.get("HR", 0)
+    hits = results.get("SINGLE", 0) + results.get("DOUBLE", 0) + results.get("TRIPLE", 0) + results.get("HR", 0)
     k_s = results.get("K_S", 0)
     k_l = results.get("K_L", 0)
     k_total = k_s + k_l
@@ -58,7 +58,7 @@ def print_report(results: dict, pitch_totals: list, num_at_bats: int, pitcher_di
     _real_print(f"  DICEBALL SIMULATION  —  {num_at_bats:,} at-bats  |  Pitcher dice: {dice_label}")
     _real_print(f"{'='*50}")
     _real_print(f"\n  Outcome breakdown:")
-    for label, key in [("  Home Run", "HR"), ("  Double", "DOUBLE"), ("  Single", "SINGLE"),
+    for label, key in [("  Home Run", "HR"), ("  Triple", "TRIPLE"), ("  Double", "DOUBLE"), ("  Single", "SINGLE"),
                         ("  Out (hard)", "OUT"), ("  Out (weak)", "WEAK_OUT"),
                         ("  Walk", "BB")]:
         n = results.get(key, 0)
