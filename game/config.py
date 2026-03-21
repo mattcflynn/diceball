@@ -18,11 +18,12 @@ class GameConfig:
     # Pitch difficulty: which die in the matching set determines difficulty
     difficulty_method: str = "max"  # "max" (high die), "mid" (middle die), "min" (low die)
 
-    # Hitter commit bonuses
+    # Hitter levers
     correct_commit_bonus: int = 1
     wrong_commit_penalty: int = -1
+    hitter_power_bonus: int = 0   # flat bonus added to every power roll result
 
-    # Information asymmetry
+    # Pitcher levers / information asymmetry
     hidden_reroll: bool = False  # True = hitter decides before pitcher re-rolls
 
     def effective_gas(self):

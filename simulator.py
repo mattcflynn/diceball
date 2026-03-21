@@ -18,18 +18,26 @@ MLB_TARGETS = {
     "BABIP": (0.300, 0.020),
 }
 
-LEVER_LABELS = [
-    ("pitcher_dice",         "Pitcher dice pool",           "4 or 5 d6"),
-    ("gas_per_at_bat",       "Gas (re-rolls) per at-bat",   "int or 'auto'"),
-    ("fb_match_count",       "FB match count",              "3=three-of-a-kind, 2=pair"),
-    ("cb_run_length",        "CB run length",               "3=full run, 2=two-die run"),
-    ("cb_allow_six",         "CB allow 6 in run",           "True or False"),
-    ("cu_diff_count",        "CU diff count",               "3=three diff same-parity, 2=two diff"),
-    ("difficulty_method",    "Pitch difficulty",            "max=high die, mid=middle die, min=low die"),
-    ("correct_commit_bonus", "Correct commit bonus",        "integer, e.g. +1"),
-    ("wrong_commit_penalty", "Wrong commit penalty",        "integer, e.g. -1"),
-    ("hidden_reroll",        "Hidden re-roll",              "True or False"),
+# Pitcher levers — affect how dominant/deceptive the pitcher is
+PITCHER_LEVERS = [
+    ("pitcher_dice",      "Pitcher dice pool",         "4 or 5 d6"),
+    ("gas_per_at_bat",    "Gas (re-rolls) per at-bat", "int or 'auto'"),
+    ("fb_match_count",    "FB match count",            "3=three-of-a-kind, 2=pair"),
+    ("cb_run_length",     "CB run length",             "3=full run, 2=two-die run"),
+    ("cb_allow_six",      "CB allow 6 in run",         "True or False"),
+    ("cu_diff_count",     "CU diff count",             "3=three diff same-parity, 2=two diff"),
+    ("difficulty_method", "Pitch difficulty",          "max=high die, mid=middle die, min=low die"),
+    ("hidden_reroll",     "Hidden re-roll",            "True or False"),
 ]
+
+# Hitter levers — affect how good the batter is
+HITTER_LEVERS = [
+    ("correct_commit_bonus", "Correct commit bonus",  "integer, e.g. +1"),
+    ("wrong_commit_penalty", "Wrong commit penalty",  "integer, e.g. -1"),
+    ("hitter_power_bonus",   "Hitter power bonus",    "integer added to every power roll"),
+]
+
+LEVER_LABELS = PITCHER_LEVERS + HITTER_LEVERS
 
 
 def display_config(cfg):
@@ -45,6 +53,7 @@ def display_config(cfg):
         "difficulty_method":    f"{cfg.difficulty_method}  ({'high die' if cfg.difficulty_method == 'max' else 'middle die' if cfg.difficulty_method == 'mid' else 'low die'})",
         "correct_commit_bonus": f"+{cfg.correct_commit_bonus}",
         "wrong_commit_penalty": str(cfg.wrong_commit_penalty),
+        "hitter_power_bonus":   f"{cfg.hitter_power_bonus:+d}",
         "hidden_reroll":        str(cfg.hidden_reroll),
     }
     print("\nConfig:")
@@ -229,6 +238,100 @@ def display_results(counts, n):
         print(f"│  {name:<8} │ {game_str:>8} │ {target_str:>8} │ {status:<16} │")
     print(S_BOT)
 
+    # --- wOBA / wRC+ / WAR ---
+    # 2024 MLB linear weights (FanGraphs)
+    LG_wOBA      = 0.317
+    wOBA_SCALE   = 1.20   # converts wOBA gap to runs
+    LG_R_PA      = 0.120  # league runs per PA
+    RUNS_PER_WIN = 9.5
+    REPL_RUNS    = 20     # replacement level: ~20 runs below average per 600 PA
+    SEASON_PA    = 600
+
+    wOBA = (0.690*BB + 0.888*H1 + 1.271*H2 + 1.616*H3 + 2.101*HR) / n if n > 0 else 0.0
+    wRC_plus = round(((wOBA - LG_wOBA) / wOBA_SCALE + LG_R_PA) / LG_R_PA * 100)
+    wRAA_600 = ((wOBA - LG_wOBA) / wOBA_SCALE) * SEASON_PA
+    oWAR_600 = (wRAA_600 + REPL_RUNS) / RUNS_PER_WIN
+
+    W_TOP = "┌" + "─" * 44 + "┐"
+    W_MID = "├───────────┼────────────────────────────────┤"
+    W_BOT = "└───────────┴────────────────────────────────┘"
+
+    print(f"\n{W_TOP}")
+    print(f"│{'  VALUE METRICS (proj. 600 PA)':<44}│")
+    print(W_MID)
+    print(f"│  {'wOBA':<8} │ {wOBA:.3f}{'  (lg avg .317)':>26} │")
+    print(f"│  {'wRC+':<8} │ {wRC_plus:<4}{'  (100 = lg avg)':>26} │")
+    print(f"│  {'oWAR':<8} │ {oWAR_600:+.1f}{'  (0.0 = replacement)':>26} │")
+    print(W_BOT)
+
+
+def compute_stats(counts, n):
+    """Return a dict of key stats from raw counts."""
+    BB  = counts["BB"]
+    H1  = counts["SINGLE"]
+    H2  = counts["DOUBLE"]
+    H3  = counts["TRIPLE"]
+    HR  = counts["HR"]
+    K   = counts["K_S"] + counts["K_L"]
+    H   = H1 + H2 + H3 + HR
+    AB  = n - BB
+    TB  = H1 + 2*H2 + 3*H3 + 4*HR
+    BA  = H / AB       if AB > 0 else 0.0
+    OBP = (H + BB) / n if n  > 0 else 0.0
+    SLG = TB / AB      if AB > 0 else 0.0
+    wOBA = (0.690*BB + 0.888*H1 + 1.271*H2 + 1.616*H3 + 2.101*HR) / n if n > 0 else 0.0
+    return {"BA": BA, "OBP": OBP, "SLG": SLG, "wOBA": wOBA,
+            "BB%": BB/n, "K%": K/n, "HR/PA": HR/n}
+
+
+def _run_search(base_cfg, search_space, target_ba, target_obp, target_slg, n_sims=1000):
+    """Generic search over a lever subspace. Returns best GameConfig."""
+    from itertools import product
+    import copy
+
+    keys = list(search_space.keys())
+    candidates = list(product(*search_space.values()))
+    total = len(candidates)
+    best_cfg, best_score = None, float("inf")
+
+    for i, values in enumerate(candidates):
+        print(f"\r  Searching... {i+1}/{total}", end="", flush=True)
+        cfg = copy.copy(base_cfg)
+        for k, v in zip(keys, values):
+            setattr(cfg, k, v)
+        counts = run_simulations(cfg, n_sims)
+        s = compute_stats(counts, n_sims)
+        score = (
+            ((s["BA"]  - target_ba)  / 0.020) ** 2 +
+            ((s["OBP"] - target_obp) / 0.025) ** 2 +
+            ((s["SLG"] - target_slg) / 0.030) ** 2
+        )
+        if score < best_score:
+            best_score, best_cfg = score, cfg
+
+    print(f"\r  Done — searched {total} configurations.       ")
+    return best_cfg
+
+
+def hitter_search(base_cfg, target_ba, target_obp, target_slg, n_sims=1000):
+    """Search over hitter levers (commit bonuses, power bonus). Pitcher config fixed."""
+    return _run_search(base_cfg, {
+        "correct_commit_bonus": [0, 1, 2],
+        "wrong_commit_penalty": [-2, -1, 0],
+        "hitter_power_bonus":   [-2, -1, 0, 1, 2, 3],
+    }, target_ba, target_obp, target_slg, n_sims)
+
+
+def pitcher_search(base_cfg, target_ba, target_obp, target_slg, n_sims=1000):
+    """Search over pitcher levers (dice, difficulty, pitch requirements, deception). Hitter config fixed."""
+    return _run_search(base_cfg, {
+        "pitcher_dice":      [4, 5],
+        "difficulty_method": ["max", "mid", "min"],
+        "hidden_reroll":     [False, True],
+        "cb_allow_six":      [False, True],
+        "fb_match_count":    [2, 3],
+    }, target_ba, target_obp, target_slg, n_sims)
+
 
 def main():
     cfg = GameConfig()
@@ -240,6 +343,8 @@ def main():
         display_config(cfg)
         print("\n  [e] Edit a lever")
         print("  [r] Run simulations")
+        print("  [h] Target hitter slash line  (searches hitter levers, pitcher config fixed)")
+        print("  [p] Target pitcher slash line (searches pitcher levers, hitter config fixed)")
         print("  [q] Quit")
         choice = input("\nChoice: ").strip().lower()
 
@@ -256,6 +361,25 @@ def main():
                 continue
             counts = run_simulations(cfg, n)
             display_results(counts, n)
+        elif choice in ("h", "p"):
+            side = "hitter" if choice == "h" else "pitcher"
+            print(f"\nTarget {side} slash line (e.g. .301 .397 .566):")
+            try:
+                tba  = float(input("  BA:  ").strip())
+                tobp = float(input("  OBP: ").strip())
+                tslg = float(input("  SLG: ").strip())
+            except ValueError:
+                print("Invalid input — enter decimals like .301")
+                continue
+            label = f".{int(tba*1000):03d}/.{int(tobp*1000):03d}/.{int(tslg*1000):03d}"
+            print(f"\n  Searching {side} levers for {label} ...")
+            best = hitter_search(cfg, tba, tobp, tslg) if choice == "h" else pitcher_search(cfg, tba, tobp, tslg)
+            print(f"\n  Best {side} config found:")
+            cfg = best
+            display_config(cfg)
+            print("\n  Running 2,000 verification sims...")
+            counts = run_simulations(cfg, 2000)
+            display_results(counts, 2000)
         else:
             print("Invalid choice.")
 

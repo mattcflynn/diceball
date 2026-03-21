@@ -91,7 +91,7 @@ def get_hitter_post_dice_choices(pitcher_dice, re_roll_input, balls,
             )
             return 's', commit_pitch, swing_type
 
-def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_difficulty, verbose=True):
+def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_difficulty, verbose=True, power_bonus=0):
     """Handles the dice rolls for a hitter's swing and determines the outcome."""
     if swing_type == 'p': contact_dice, power_dice = 2, 4
     else: contact_dice, power_dice = 4, 2
@@ -125,7 +125,7 @@ def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_
 
     if successful_dice >= 2 or is_critical_hit:
         power_roll_result = roll_dice(final_power_dice)
-        power_value = sum(power_roll_result)
+        power_value = sum(power_roll_result) + power_bonus
         if verbose:
             print("CONTACT! The ball is in play!")
             input("Press Enter for the Power roll...")
@@ -318,7 +318,8 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False, hitter_is_ai=False, verb
                     contact_roll_bonus = config.wrong_commit_penalty
                     if verbose: print(f"\nHitter committed to {commit_pitch.upper()} but it's a {chosen_pitch}! {contact_roll_bonus} to all contact dice.")
 
-            swing_result = resolve_swing(swing_type, 0, 0, contact_roll_bonus, pitch_difficulty, verbose)
+            swing_result = resolve_swing(swing_type, 0, 0, contact_roll_bonus, pitch_difficulty, verbose,
+                                         power_bonus=config.hitter_power_bonus)
 
             if swing_result in ["SINGLE", "DOUBLE", "TRIPLE", "HR", "OUT", "WEAK_OUT"]:
                 if verbose:

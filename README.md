@@ -183,7 +183,9 @@ A 4-dice pitcher throws more balls (harder to form valid combos) and has 2 gas t
 uv run simulator.py
 ```
 
-Runs CPU vs. CPU at-bats in bulk and compares results to 2024 MLB league averages. All game levers are adjustable:
+Runs CPU vs. CPU at-bats in bulk and compares results to 2024 MLB league averages. Levers are split into two groups:
+
+**Pitcher levers** — control how dominant or deceptive the pitcher is:
 
 | # | Lever | Default | Description |
 |---|-------|---------|-------------|
@@ -194,13 +196,37 @@ Runs CPU vs. CPU at-bats in bulk and compares results to 2024 MLB league average
 | 5 | CB allow 6 in run | False | Allow 6 as part of a curveball run |
 | 6 | CU diff count | 3 | 3 = three different same-parity, 2 = any two |
 | 7 | Pitch difficulty | max | `max` = high die, `mid` = middle die, `min` = low die |
-| 8 | Correct commit bonus | +1 | Contact die bonus for guessing right |
-| 9 | Wrong commit penalty | −1 | Contact die penalty for guessing wrong |
-| 10 | Hidden re-roll | False | Hitter decides before seeing pitcher's re-roll plan |
+| 8 | Hidden re-roll | False | Hitter decides before seeing pitcher's re-roll plan |
 
-**Hidden re-roll** (`True`) changes the information structure of the game: the hitter commits based only on the pre-reroll dice, not knowing which dice the pitcher intends to replace. This increases K% and K Looking by creating genuine uncertainty — the hitter may take expecting a ball, then get burned by a successful re-roll.
+**Hitter levers** — control how good the batter is:
+
+| # | Lever | Default | Description |
+|---|-------|---------|-------------|
+| 9 | Correct commit bonus | +1 | Contact die bonus for guessing right |
+| 10 | Wrong commit penalty | −1 | Contact die penalty for guessing wrong |
+| 11 | Hitter power bonus | +0 | Flat bonus added to every power roll result |
+
+**Hidden re-roll** (`True`) changes the information structure of the game: the hitter commits based only on the pre-reroll dice, not knowing which dice the pitcher intends to replace. This increases K% and K Looking by creating genuine uncertainty.
+
+**Hitter power bonus** shifts all power roll outcomes — a +2 bonus effectively lowers the HR threshold from ≥20 to ≥18, modeling a true power hitter.
 
 With default settings (4 dice, hidden re-roll off), simulated stats land close to 2024 MLB averages on BB%, SLG, OPS, and HR/PA. Enabling hidden re-roll brings K% to target at the cost of a slight BB% increase.
+
+### Player profiling
+
+The simulator can work in reverse — enter a target slash line and it searches for the best lever configuration:
+
+- **`[h]` Hitter search** — keeps the current pitcher config fixed, searches hitter levers (commit bonus/penalty, power bonus) to match a batter's slash line. Use this to model a specific hitter against a league-average pitcher.
+- **`[p]` Pitcher search** — keeps the current hitter config fixed, searches pitcher levers (dice pool, difficulty, pitch requirements, hidden re-roll) to match a pitcher's slash line against that hitter.
+
+After each search, the best config is loaded and a 2,000-sim verification run is shown automatically. Results include **wOBA**, **wRC+**, and **oWAR** (projected to 600 PA) so you can compare directly to real player values.
+
+Example workflow — modeling Trout vs. Cole:
+```
+[h] BA .301 / OBP .397 / SLG .566  →  finds hitter levers for Trout
+[p] BA .200 / OBP .270 / SLG .320  →  finds pitcher levers for Cole against that hitter
+[r] 5000                             →  full sim of that matchup
+```
 
 ---
 
@@ -239,7 +265,13 @@ GAS 🔥  5 dice → 1 gas, 4 dice → 2 gas. Spent down, not refilled.
 
 ## Fork Ideas
 
-The game is designed to be hackable. Here are directions worth exploring:
+The game is designed to be hackable. The current stable state is tagged:
+
+```bash
+git checkout v5   # simulator, count-aware AI, hidden re-roll mechanic
+```
+
+Here are directions worth exploring:
 
 ### Information asymmetry
 The **hidden re-roll** lever (simulator option 10) is a proof of concept. A fuller version would hide the original dice roll from the hitter entirely until the pitch resolves — forcing a swing/take decision with incomplete information. This would make K Looking much more common and bring it in line with MLB rates (~7.5%).
