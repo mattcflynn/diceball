@@ -1,6 +1,7 @@
 import random
 from itertools import product, combinations
-from game.pitch_utils import find_pitch_outcome, check_pitch_combo
+from game.pitch_utils import find_pitch_outcome, check_pitch_combo, find_key_dice, calc_difficulty
+from game.config import DEFAULT_CONFIG
 
 def _get_swing_dice(swing_type, bonus_dice_allocation):
     """Determines the base number of contact and power dice for a swing."""
@@ -57,11 +58,13 @@ def _calculate_power_probs(power_dice, swing_type='p'):
         "SINGLE": single_count / total_outcomes,
     }
 
-def _calculate_pitch_difficulty_probs(kept_dice, num_reroll, pitch_type):
+def _calculate_pitch_difficulty_probs(kept_dice, num_reroll, pitch_type, config=None):
     """
     Calculates the probability of forming a pitch at each possible difficulty level.
     Returns a dictionary mapping difficulty (int) to probability (float).
     """
+    if config is None:
+        config = DEFAULT_CONFIG
     difficulty_counts = {i: 0 for i in range(1, 7)}
 
     if len(kept_dice) + num_reroll < 3:
@@ -77,8 +80,9 @@ def _calculate_pitch_difficulty_probs(kept_dice, num_reroll, pitch_type):
 
         best_difficulty = -1
         for combo in combinations(final_hand, 3):
-            if check_pitch_combo(list(combo), pitch_type):
-                difficulty = max(combo)
+            key_dice = find_key_dice(list(combo), pitch_type, config)
+            if key_dice is not None:
+                difficulty = calc_difficulty(key_dice, config.difficulty_method)
                 if difficulty > best_difficulty:
                     best_difficulty = difficulty
 
@@ -94,11 +98,13 @@ def _get_pitch_category(pitch_type):
 def calculate_bats_probabilities(
     pitcher_dice, re_roll_input, swing_type, contact_mod, power_mod, contact_roll_bonus,
     bonus_dice, pitch_streak_type, pitch_streak_count, hitter_approach, hitter_sit_guess,
-    gas_remaining=0
+    gas_remaining=0, config=None
 ):
     """
     Calculates and displays the B.A.T.S. probabilities for the hitter.
     """
+    if config is None:
+        config = DEFAULT_CONFIG
     # --- Determine Kept vs. Re-rolled Dice ---
     kept_dice = []
     all_indices = list(range(len(pitcher_dice)))
@@ -128,7 +134,7 @@ def calculate_bats_probabilities(
         final_contact_dice = max(0, base_contact + current_contact_mod)
         final_power_dice = max(0, base_power + current_power_mod)
 
-        pitch_difficulty_probs = _calculate_pitch_difficulty_probs(kept_dice, num_reroll, pitch_type)
+        pitch_difficulty_probs = _calculate_pitch_difficulty_probs(kept_dice, num_reroll, pitch_type, config)
 
         for difficulty, pitch_prob in pitch_difficulty_probs.items():
             if pitch_prob < 0.01: continue

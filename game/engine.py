@@ -3,6 +3,7 @@ import time
 from game.pitch_utils import PITCH_REQUIREMENTS, check_pitch_combo, find_pitch_outcome
 from game.ai import make_pitcher_decision, make_hitter_decision
 from game.bats import calculate_bats_probabilities
+from game.config import GameConfig, DEFAULT_CONFIG
 
 # --- Helper Functions ---
 
@@ -160,11 +161,13 @@ def resolve_swing(swing_type, contact_mod, power_mod, contact_roll_bonus, pitch_
         return "MISS"
 
 # --- Main Game Loop ---
-def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False, hitter_is_ai=False, verbose=True):
+def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False, hitter_is_ai=False, verbose=True, config=None):
+    if config is None:
+        config = DEFAULT_CONFIG
     balls, strikes, at_bat_over = 0, 0, False
     pitcher_hand = ["FB", "CB", "CU"]
     pitch_streak_type, pitch_streak_count = None, 0
-    pitcher_gas = max(0, 6 - pitcher_dice_pool)  # 4 dice → 2 gas, 5 dice → 1 gas
+    pitcher_gas = config.effective_gas()
     # Gas is spent down, not refilled — pitcher weakens over a long at-bat
     final_result, pitch_count, last_strike_swinging = None, 0, False
 
@@ -191,7 +194,8 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False, hitter_is_ai=False, verb
         # --- PUBLIC PITCHER RE-ROLL DECISION + SECRET COMMIT ---
         if pitcher_is_ai:
             re_roll_input, chosen_pitch = make_pitcher_decision(
-                pitcher_dice, balls, strikes, pitch_streak_type, pitch_streak_count, pitcher_gas
+                pitcher_dice, balls, strikes, pitch_streak_type, pitch_streak_count, pitcher_gas,
+                config=config, verbose=verbose
             )
             if verbose:
                 if re_roll_input:
@@ -223,9 +227,11 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False, hitter_is_ai=False, verb
 
         # --- HITTER'S DECISION (after seeing dice + re-roll plan) ---
         if hitter_is_ai:
+            hitter_reroll_info = "" if config.hidden_reroll else re_roll_input
             final_swing_decision, commit_pitch, swing_type = make_hitter_decision(
-                pitcher_dice, re_roll_input, balls, strikes,
-                pitch_streak_type, pitch_streak_count, pitcher_gas
+                pitcher_dice, hitter_reroll_info, balls, strikes,
+                pitch_streak_type, pitch_streak_count, pitcher_gas,
+                config=config, verbose=verbose
             )
         else:
             final_swing_decision, commit_pitch, swing_type = get_hitter_post_dice_choices(
@@ -274,7 +280,7 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False, hitter_is_ai=False, verb
                 difficulty_modifier = -1
                 if verbose: print(f"\nPitcher getting predictable with {current_pitch_category} pitches! PITCH DIFFICULTY -1!")
 
-        chosen_dice, pitch_difficulty, pitch_result = find_pitch_outcome(pitcher_dice, chosen_pitch)
+        chosen_dice, pitch_difficulty, pitch_result = find_pitch_outcome(pitcher_dice, chosen_pitch, config)
         pitch_difficulty += difficulty_modifier
 
         if verbose:
@@ -306,11 +312,11 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False, hitter_is_ai=False, verb
             contact_roll_bonus = 0
             if commit_pitch:
                 if commit_pitch.upper() == chosen_pitch:
-                    contact_roll_bonus = 1
-                    if verbose: print(f"\nHitter's commit on {commit_pitch.upper()} was RIGHT! +1 to all contact dice.")
+                    contact_roll_bonus = config.correct_commit_bonus
+                    if verbose: print(f"\nHitter's commit on {commit_pitch.upper()} was RIGHT! +{contact_roll_bonus} to all contact dice.")
                 else:
-                    contact_roll_bonus = -1
-                    if verbose: print(f"\nHitter committed to {commit_pitch.upper()} but it's a {chosen_pitch}! -1 to all contact dice.")
+                    contact_roll_bonus = config.wrong_commit_penalty
+                    if verbose: print(f"\nHitter committed to {commit_pitch.upper()} but it's a {chosen_pitch}! {contact_roll_bonus} to all contact dice.")
 
             swing_result = resolve_swing(swing_type, 0, 0, contact_roll_bonus, pitch_difficulty, verbose)
 

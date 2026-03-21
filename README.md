@@ -168,12 +168,39 @@ Power probabilities (HR/Triple/2B/1B) are also shown if contact is made. B.A.T.S
 
 | | 4 dice | 5 dice |
 |--|--------|--------|
-| Walk rate | ~13% | ~6% |
-| Batting average | ~.240 | ~.251 |
+| Walk rate | ~10% | ~6% |
+| Batting average | ~.232 | ~.251 |
 | Gas budget | 2 | 1 |
 | Variance | High — pitches are less predictable | Lower — pitcher is more controlled |
 
 A 4-dice pitcher throws more balls (harder to form valid combos) and has 2 gas to compensate — but still walks more batters. A 5-dice pitcher is more controlled with 1 gas.
+
+---
+
+## Simulator
+
+```bash
+uv run simulator.py
+```
+
+Runs CPU vs. CPU at-bats in bulk and compares results to 2024 MLB league averages. All game levers are adjustable:
+
+| # | Lever | Default | Description |
+|---|-------|---------|-------------|
+| 1 | Pitcher dice pool | 4 | 4 or 5 d6 |
+| 2 | Gas per at-bat | auto | Re-rolls available; auto = `max(0, 6 − dice)` |
+| 3 | FB match count | 3 | 3 = three-of-a-kind, 2 = pair |
+| 4 | CB run length | 3 | 3 = full 3-die run, 2 = any 2 consecutive |
+| 5 | CB allow 6 in run | False | Allow 6 as part of a curveball run |
+| 6 | CU diff count | 3 | 3 = three different same-parity, 2 = any two |
+| 7 | Pitch difficulty | max | `max` = high die, `mid` = middle die, `min` = low die |
+| 8 | Correct commit bonus | +1 | Contact die bonus for guessing right |
+| 9 | Wrong commit penalty | −1 | Contact die penalty for guessing wrong |
+| 10 | Hidden re-roll | False | Hitter decides before seeing pitcher's re-roll plan |
+
+**Hidden re-roll** (`True`) changes the information structure of the game: the hitter commits based only on the pre-reroll dice, not knowing which dice the pitcher intends to replace. This increases K% and K Looking by creating genuine uncertainty — the hitter may take expecting a ball, then get burned by a successful re-roll.
+
+With default settings (4 dice, hidden re-roll off), simulated stats land close to 2024 MLB averages on BB%, SLG, OPS, and HR/PA. Enabling hidden re-roll brings K% to target at the cost of a slight BB% increase.
 
 ---
 
@@ -207,3 +234,32 @@ COMMIT (after seeing dice)
 GAS 🔥  5 dice → 1 gas, 4 dice → 2 gas. Spent down, not refilled.
        1 gas = re-roll 1 die (public).
 ```
+
+---
+
+## Fork Ideas
+
+The game is designed to be hackable. Here are directions worth exploring:
+
+### Information asymmetry
+The **hidden re-roll** lever (simulator option 10) is a proof of concept. A fuller version would hide the original dice roll from the hitter entirely until the pitch resolves — forcing a swing/take decision with incomplete information. This would make K Looking much more common and bring it in line with MLB rates (~7.5%).
+
+### Multi-inning scoring
+The current unit is a single at-bat. Adding baserunners, inning state, and a run-scoring model would let you simulate full games. The `game/player.py` and `game/abilities.py` stubs are placeholders for this direction.
+
+### Player abilities
+`game/abilities.py` has an `Ability` stub. Possible ability directions:
+- **Pitcher:** "Power arm" (all FB difficulties +1), "Pinpoint" (no difficulty penalty on intentional bluffs), "Filthy curve" (CB threshold lowered)
+- **Hitter:** "Good eye" (threshold for taking balls reduced), "Clutch" (contact bonus with 2 strikes), "Pull hitter" (power swing HR threshold lowered by 1)
+
+### Pitch arsenal expansion
+Add pitch types beyond FB/CB/CU. Ideas:
+- **Slider (SL):** Two same-value dice + one lower adjacent value (e.g., `[4, 4, 3]`). Hybrid of FB and CB.
+- **Splitter (FS):** Two dice summing to 7 (e.g., `[1,6]`, `[2,5]`, `[3,4]`) — the "falling" pitch. Difficulty = lower die.
+- **Knuckleball (KN):** Any four different values. Low difficulty but hard to commit to.
+
+### Difficulty tuning
+The `difficulty_method` lever (`max` / `mid` / `min`) has a large effect on BA and BABIP. `mid` brings BABIP closer to the .300 MLB target while keeping pitch variety. Worth exploring as a per-pitch-type setting (e.g., FB uses `max`, CB uses `mid`).
+
+### Lineup simulation
+Run a full 9-batter lineup through multiple innings. Aggregate stats (BA, OBP, SLG) per lineup slot. Compare different pitcher configurations against a fixed lineup to find optimal pitcher builds.
