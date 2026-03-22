@@ -210,21 +210,23 @@ def display_results(counts, pitch_counts, n):
     print(O_BOT)
 
     # --- Pitch mix ---
-    # Column widths between pipes: 16 | 8 | 12  (total inner = 39)
+    # Pitch mix — column widths between pipes: 19 | 8 | 10 | 10 (total 52)
+    MLB_PITCH_MIX = {"FB": "~53%", "CB": "~29%", "CU": "~18%"}
     total_pitches = sum(pitch_counts.values())
-    P_TOP = "┌" + "─" * 41 + "┐"
-    P_SEP = "├──────────────────┬────────┬────────────┤"
-    P_MID = "├──────────────────┼────────┼────────────┤"
-    P_BOT = "└──────────────────┴────────┴────────────┘"
+    P_TOP = "┌" + "─" * 50 + "┐"
+    P_SEP = "├───────────────────┬────────┬──────────┬──────────┤"
+    P_MID = "├───────────────────┼────────┼──────────┼──────────┤"
+    P_BOT = "└───────────────────┴────────┴──────────┴──────────┘"
     print(f"\n{P_TOP}")
-    print(f"│{'  PITCH MIX  (' + str(f'{total_pitches:,}') + ' pitches)':<41}│")
+    print(f"│{'  PITCH MIX  (' + str(f'{total_pitches:,}') + ' pitches)':<50}│")
     print(P_SEP)
-    print(f"│  {'Type':<15} │ {'Count':>6} │ {'% pitches':>9}  │")
+    print(f"│  {'Type':<16} │ {'Count':>6} │ {'Game %':>7}  │ {'MLB ~':<8} │")
     print(P_MID)
     for code, label in PITCH_DISPLAY.items():
         cnt = pitch_counts.get(code, 0)
         pct = cnt / total_pitches if total_pitches > 0 else 0.0
-        print(f"│  {label:<15} │ {cnt:>6} │ {pct:>9.1%}  │")
+        mlb = MLB_PITCH_MIX.get(code, "")
+        print(f"│  {label:<16} │ {cnt:>6} │ {pct:>7.1%}  │ {mlb:<8} │")
     print(P_BOT)
 
     def flag(val, target, tol):
@@ -283,7 +285,7 @@ def display_results(counts, pitch_counts, n):
     print(f"\n{W_TOP}")
     print(f"│{'  VALUE METRICS (proj. 600 PA)':<44}│")
     print(W_MID)
-    print(f"│  {'wOBA':<8} │ {wOBA:.3f}{'  (lg avg .317)':>26} │")
+    print(f"│  {'wOBA':<8} │ {wOBA:.3f}{'  (lg avg .317)':>25} │")
     print(f"│  {'wRC+':<8} │ {wRC_plus:<4}{'  (100 = lg avg)':>26} │")
     print(f"│  {'oWAR':<8} │ {oWAR_600:+.1f}{'  (0.0 = replacement)':>26} │")
     print(W_BOT)
