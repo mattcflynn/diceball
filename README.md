@@ -212,6 +212,13 @@ Runs CPU vs. CPU at-bats in bulk and compares results to 2024 MLB league average
 
 With default settings (4 dice, hidden re-roll off), simulated stats land close to 2024 MLB averages on BB%, SLG, OPS, and HR/PA. Enabling hidden re-roll brings K% to target at the cost of a slight BB% increase.
 
+Each simulation run produces four output tables:
+
+1. **Outcome breakdown** — per-PA rates for every result (BB, K, hit types, outs) vs. MLB 2024 averages
+2. **Pitch mix** — Fastball / Breaking Ball / Off Speed distribution vs. MLB 2024 averages (~53% / ~29% / ~18%)
+3. **Stat line** — BA, OBP, SLG, OPS, BB%, K%, HR/PA, BABIP flagged against MLB targets
+4. **Value metrics** — wOBA, wRC+, and oWAR projected to 600 PA
+
 ### Player profiling
 
 The simulator can work in reverse — enter a target slash line and it searches for the best lever configuration:
@@ -234,9 +241,9 @@ Example workflow — modeling Trout vs. Cole:
 
 ```
 PITCH TYPES
-  FB  Three-of-a-kind          [3,3,3]
-  CB  Three consecutive, no 6  [2,3,4]
-  CU  Three diff, all odd/even [1,3,5] or [2,4,6]
+  FB  Fastball      Three-of-a-kind          [3,3,3]
+  CB  Breaking Ball Three consecutive, no 6  [2,3,4]
+  CU  Off Speed     Three diff, all odd/even [1,3,5] or [2,4,6]
 
 CONTACT  2+ dice ≥ difficulty  (or two natural 6s)
 
