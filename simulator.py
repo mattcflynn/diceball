@@ -117,6 +117,7 @@ def run_simulations(cfg, n):
     counts = {"BB": 0, "K_S": 0, "K_L": 0,
               "SINGLE": 0, "DOUBLE": 0, "TRIPLE": 0, "HR": 0,
               "OUT": 0, "WEAK_OUT": 0}
+    pitch_counts = {"FB": 0, "CB": 0, "CU": 0}
     for i in range(n):
         if i % 200 == 0:
             print(f"\r  Simulating... {i}/{n}", end="", flush=True)
@@ -125,11 +126,16 @@ def run_simulations(cfg, n):
         r = ab["result"]
         if r in counts:
             counts[r] += 1
+        for pt, c in ab.get("pitch_types", {}).items():
+            pitch_counts[pt] = pitch_counts.get(pt, 0) + c
     print(f"\r  Done — {n} at-bats simulated.       ")
-    return counts
+    return counts, pitch_counts
 
 
-def display_results(counts, n):
+PITCH_DISPLAY = {"FB": "Fastball", "CB": "Breaking Ball", "CU": "Off Speed"}
+
+
+def display_results(counts, pitch_counts, n):
     BB  = counts["BB"]
     K_S = counts["K_S"]
     K_L = counts["K_L"]
@@ -202,6 +208,24 @@ def display_results(counts, n):
             mlb_str = ""
         print(f"│  {label:<16} │ {cnt:>6} │ {rate:>7.1%}  │ {mlb_str:<15} │")
     print(O_BOT)
+
+    # --- Pitch mix ---
+    # Column widths between pipes: 16 | 8 | 12  (total inner = 39)
+    total_pitches = sum(pitch_counts.values())
+    P_TOP = "┌" + "─" * 41 + "┐"
+    P_SEP = "├──────────────────┬────────┬────────────┤"
+    P_MID = "├──────────────────┼────────┼────────────┤"
+    P_BOT = "└──────────────────┴────────┴────────────┘"
+    print(f"\n{P_TOP}")
+    print(f"│{'  PITCH MIX  (' + str(f'{total_pitches:,}') + ' pitches)':<41}│")
+    print(P_SEP)
+    print(f"│  {'Type':<15} │ {'Count':>6} │ {'% pitches':>9}  │")
+    print(P_MID)
+    for code, label in PITCH_DISPLAY.items():
+        cnt = pitch_counts.get(code, 0)
+        pct = cnt / total_pitches if total_pitches > 0 else 0.0
+        print(f"│  {label:<15} │ {cnt:>6} │ {pct:>9.1%}  │")
+    print(P_BOT)
 
     def flag(val, target, tol):
         diff = val - target
@@ -299,7 +323,7 @@ def _run_search(base_cfg, search_space, target_ba, target_obp, target_slg, n_sim
         cfg = copy.copy(base_cfg)
         for k, v in zip(keys, values):
             setattr(cfg, k, v)
-        counts = run_simulations(cfg, n_sims)
+        counts, _ = run_simulations(cfg, n_sims)
         s = compute_stats(counts, n_sims)
         score = (
             ((s["BA"]  - target_ba)  / 0.020) ** 2 +
@@ -359,8 +383,8 @@ def main():
             except ValueError:
                 print("Invalid number.")
                 continue
-            counts = run_simulations(cfg, n)
-            display_results(counts, n)
+            counts, pitch_counts = run_simulations(cfg, n)
+            display_results(counts, pitch_counts, n)
         elif choice in ("h", "p"):
             side = "hitter" if choice == "h" else "pitcher"
             print(f"\nTarget {side} slash line (e.g. .301 .397 .566):")
@@ -378,8 +402,8 @@ def main():
             cfg = best
             display_config(cfg)
             print("\n  Running 2,000 verification sims...")
-            counts = run_simulations(cfg, 2000)
-            display_results(counts, 2000)
+            counts, pitch_counts = run_simulations(cfg, 2000)
+            display_results(counts, pitch_counts, 2000)
         else:
             print("Invalid choice.")
 

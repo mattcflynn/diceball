@@ -170,6 +170,7 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False, hitter_is_ai=False, verb
     pitcher_gas = config.effective_gas()
     # Gas is spent down, not refilled — pitcher weakens over a long at-bat
     final_result, pitch_count, last_strike_swinging = None, 0, False
+    pitch_type_counts = {"FB": 0, "CB": 0, "CU": 0}
 
     if verbose:
         print("========================================")
@@ -267,6 +268,7 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False, hitter_is_ai=False, verb
                 if verbose: print("Invalid re-roll input. Keeping all dice.")
 
         # --- PITCH OUTCOME ---
+        pitch_type_counts[chosen_pitch] = pitch_type_counts.get(chosen_pitch, 0) + 1
         difficulty_modifier = 0
         current_pitch_category = "FB" if chosen_pitch == "FB" else "OFFSPEED"
 
@@ -347,4 +349,5 @@ def play_at_bat(pitcher_dice_pool, pitcher_is_ai=False, hitter_is_ai=False, verb
                 final_result = "BB"
                 at_bat_over = True
 
-    return {"result": final_result, "pitches": pitch_count, "balls": balls, "strikes": strikes}
+    return {"result": final_result, "pitches": pitch_count, "balls": balls, "strikes": strikes,
+            "pitch_types": pitch_type_counts}
