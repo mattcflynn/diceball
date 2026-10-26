@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cardball Playtest</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div class="brand">CARDBALL <span>playtest</span></div>
+  <nav id="modes">
+    <button data-mode="bat">Bat vs AI</button>
+    <button data-mode="pitch">Pitch vs AI</button>
+    <button data-mode="watch">Watch AI vs AI</button>
+  </nav>
+  <div class="tools">
+    <button id="btn-levers">Levers</button>
+    <button id="btn-sim">Simulate</button>
+  </div>
+</header>
+
+<main>
+  <section id="left" class="col">
+    <div class="panel scoreboard">
+      <div class="sb-row"><span class="sb-label">AB</span><span id="ab-no">1</span><span class="sb-label">Pitch</span><span id="pitch-no">1</span></div>
+      <div class="sb-row"><span class="sb-label">Balls</span><span id="balls" class="lights"></span></div>
+      <div class="sb-row"><span class="sb-label">Strikes</span><span id="strikes" class="lights"></span></div>
+      <div class="sb-row small"><span>Pitcher hand</span><span id="hand-count">0</span><span>Deck</span><span id="deck-count">0</span></div>
+    </div>
+    <div class="panel">
+      <h3>Session</h3>
+      <div id="slash" class="slash">.000 / .000 / .000</div>
+      <div id="session-line" class="muted small"></div>
+      <ol id="history" class="history"></ol>
+    </div>
+    <div class="panel">
+      <h3>This at-bat</h3>
+      <ol id="ab-log" class="ablog"></ol>
+    </div>
+  </section>
+
+  <section id="center" class="col">
+    <div id="status" class="status"></div>
+    <div class="zone-wrap">
+      <div id="zone" class="zone"></div>
+      <div id="secret" class="secret"></div>
+    </div>
+    <div id="read" class="read"></div>
+
+    <!-- Batter controls -->
+    <div id="bat-controls" class="panel controls">
+      <div class="tray-head">
+        <h3>Your dice</h3>
+        <label class="toggle"><input type="checkbox" id="scout-toggle"> Scout overlay</label>
+      </div>
+      <div id="tray" class="tray"></div>
+      <div id="tray-summary" class="muted small"></div>
+      <div class="buttons">
+        <button id="btn-swing" class="primary">Swing</button>
+        <button id="btn-take">Take</button>
+        <button id="btn-clear">Clear</button>
+        <button id="btn-suggest">AI suggest</button>
+      </div>
+      <div class="muted small hint">Click a zone card to add a die · shift-click or right-click to remove</div>
+    </div>
+
+    <!-- Pitcher controls -->
+    <div id="pitch-controls" class="panel controls">
+      <div class="tray-head"><h3>Your hand</h3><span class="muted small" id="pitch-hint"></span></div>
+      <div id="hand" class="hand small-cards"></div>
+      <div class="pitch-row">
+        <div>
+          <div class="muted small">Pitch card (secret)</div>
+          <div id="reveal-slot" class="slot">click a hand card, then here</div>
+        </div>
+        <div>
+          <div class="muted small">Location (secret heart)</div>
+          <div id="hearts" class="hearts"></div>
+        </div>
+      </div>
+      <div id="pitch-preview" class="muted small"></div>
+      <div class="buttons">
+        <button id="btn-throw" class="primary">Throw</button>
+        <button id="btn-pclear">Reset</button>
+        <button id="btn-psuggest">AI suggest</button>
+      </div>
+    </div>
+
+    <!-- Watch controls -->
+    <div id="watch-controls" class="panel controls">
+      <div class="tray-head"><h3>Pitcher hand</h3>
+        <label class="toggle"><input type="checkbox" id="peek-toggle"> Peek at the secret pitch</label></div>
+      <div id="watch-hand" class="hand small-cards"></div>
+      <div class="buttons">
+        <button id="btn-step" class="primary">Step</button>
+        <button id="btn-auto">Auto ▶</button>
+        <label class="muted small">speed <input type="range" id="speed" min="200" max="2500" value="1100"></label>
+      </div>
+    </div>
+
+    <div id="next-wrap" class="buttons center"><button id="btn-next" class="primary">Next pitch</button></div>
+  </section>
+
+  <section id="right" class="col">
+    <div class="panel">
+      <h3>Last pitch</h3>
+      <div id="result" class="result muted">No pitch yet.</div>
+    </div>
+    <div class="panel">
+      <h3>Played cards</h3>
+      <div id="discards" class="discards"></div>
+    </div>
+  </section>
+</main>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head"><h2 id="modal-title"></h2><button id="modal-close">✕</button></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+<div id="toast" class="toast hidden"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

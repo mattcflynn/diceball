@@ -10,6 +10,17 @@ uv run main.py
 
 No tests or linter are configured yet.
 
+## Cardball (card-vs-dice rework)
+
+A second game lives in `cardball/`: the pitcher plays cards into a 3×3 (or 2×2) zone, the batter bets dice. It is independent of `game/`. Full rules, levers, AI and tuning findings: `docs/cardball.md`.
+
+```bash
+uv run -m cardball.server          # playtest UI (localhost:8765)
+uv run -m cardball.sim run -n 2000 # AI vs AI stats vs 2026 MLB
+```
+
+Rules and AI are Python only; `cardball/web/` just renders server state. Keep `docs/cardball.md` in sync when rules or levers change.
+
 ## Architecture
 
 Diceball Duel is a CLI dice baseball simulation. One at-bat is the unit of play: a pitcher rolls dice to form a pitch combo, and a hitter rolls to make contact and determine the hit outcome.
