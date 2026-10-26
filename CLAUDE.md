@@ -12,7 +12,7 @@ No tests or linter are configured yet.
 
 ## Cardball (card-vs-dice rework)
 
-A second game lives in `cardball/`: the pitcher plays cards into a 3×3 (or 2×2) zone, the batter bets dice. It is independent of `game/`. Full rules, levers, AI and tuning findings: `docs/cardball.md`.
+A second game lives in `cardball/`: the pitcher plays cards into a 2×2 (or 3×3) zone, the batter bets dice. It is independent of `game/`. Full rules, levers, AI and tuning findings: `docs/cardball.md`.
 
 ```bash
 uv run -m cardball.server          # playtest UI (localhost:8765)

@@ -75,11 +75,12 @@ def _tally_ab(t, ab, cfg):
         g = t["grid_by_pitch"][min(i, 6)]
         g[0] += len(p["grid"])
         g[1] += 1
-        if p["strike"]:
-            t["zone"] += 1
+        ps = p["p_strike"]   # swings skip the strike roll, so zone stats use the expected strike chance
+        t["zone"] += ps
         if p["swing"]:
             t["swings"] += 1
-            t["z_swings" if p["strike"] else "o_swings"] += 1
+            t["z_swings"] += ps
+            t["o_swings"] += 1 - ps
             t["cells_bet"] += len(p["bets"])
             dice = sum(p["bets"].values())
             t["dice_bet"] += dice
@@ -197,7 +198,7 @@ LOSS_KEYS = {"BA": 1.0, "OBP": 1.0, "SLG": 1.0, "K%": 1.0, "BB%": 1.0, "HR/PA": 
 TUNE_STEPS = {
     "t1": 1, "t2": 1, "t3": 1, "t4": 1, "zone_bias": 0.05, "batter_eye": 0.1, "batter_temp": 0.02, "pitcher_temp": 0.5,
     "batter_dice": 1, "hand_size": 1, "draw_per_pitch": 1, "power_bonus": 1, "suit_bonus_per_card": 1,
-    "chase_penalty": 1, "pitcher_keep": 1, "grid_noise": 0.05, "command_bonus": 1, "command_weight": 1.0,
+    "pitcher_keep": 1, "grid_noise": 0.05, "command_bonus": 1, "command_weight": 1.0,
     "card_cost": 1, "suit_bonus_min": 1,
 }
 

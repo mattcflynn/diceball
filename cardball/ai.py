@@ -58,7 +58,7 @@ MAX_CELLS = 5   # most cards the AI batter will spread dice over
 def location_options(grid, hand, count, cfg):
     """
     Pitcher's mixed policy given the zone and the cards still in hand.
-    Returns [(prob, cell, reveal_card, p_strike, batter difficulty on a strike)].
+    Returns [(prob, cell, reveal_card, p_strike if taken, batter difficulty)].
     """
     if not hand or not grid:
         return [(1.0, None, None, 0.0, None)]
@@ -115,7 +115,6 @@ def batter_beliefs(view, cfg, rng):
 
     target = defaultdict(float)
     contest = defaultdict(lambda: defaultdict(float))
-    whiff = defaultdict(float)
     strike_by_cell = defaultdict(float)
     p_empty = p_strike_tot = 0.0
     read = view.get("read_row")
@@ -139,13 +138,9 @@ def batter_beliefs(view, cfg, rng):
             target[cell] += w
             p_strike_tot += w * ps
             strike_by_cell[cell] += w * ps
-            contest[cell][d] += w * ps
-            if cfg.chase_rule == "contest":
-                contest[cell][d + cfg.chase_penalty] += w * (1 - ps)
-            else:
-                whiff[cell] += w * (1 - ps)
+            contest[cell][d] += w
     return {"target": dict(target), "contest": {c: dict(v) for c, v in contest.items()},
-            "whiff": dict(whiff), "strike_by_cell": dict(strike_by_cell),
+            "strike_by_cell": dict(strike_by_cell),
             "p_empty": p_empty, "p_strike": p_strike_tot}
 
 
@@ -214,19 +209,19 @@ def batter_decide(view, cfg, rng):
         for n in range(1, pool + 1):
             pl = fo = 0.0
             for d, w in q.items():
-                a, f = contact_probs(n, sides, d, cfg.batter_ones, tie_play)
+                a, f = contact_probs(n, sides, d, cfg.one_whiffs, cfg.six_hits, tie_play)
                 pl += w * a
                 fo += w * f
             play[c].append(pl)
             foul[c].append(fo)
     B = [bip_value(r, cfg) for r in range(pool + 1)]
-    tgt, wh = bel["target"], bel["whiff"]
+    tgt = bel["target"]
 
     def cell_val(c, n, bv):
         if n == 0:
             return tgt.get(c, 0.0) * whiff_v
         pl, fo = play[c][n], foul[c][n]
-        return pl * bv + fo * foul_v + (qsum[c] - pl - fo + wh.get(c, 0.0)) * whiff_v
+        return pl * bv + fo * foul_v + (qsum[c] - pl - fo) * whiff_v
 
     best_ev, best_alloc = ev_take, {}
     best_swing, best_swing_alloc = NEG, None

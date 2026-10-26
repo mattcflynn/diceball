@@ -200,6 +200,7 @@ main {
 .die.pitcher { background: var(--heart); color: #fff; }
 .die.pitcher .p { background: #fff; }
 .die.one { box-shadow: 0 0 0 3px var(--bad); }
+.die.unrolled { opacity: .25; }
 
 /* modal */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; z-index: 50; overflow: auto; }

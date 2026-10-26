@@ -6,7 +6,7 @@ from dataclasses import dataclass, asdict, fields
 @dataclass
 class Config:
     # --- Table ---
-    grid_size: int = 3             # 3 = 3x3 zone (hearts A-9), 2 = 2x2 (hearts A-4)
+    grid_size: int = 2             # 2 = 2x2 zone (hearts A-4), 3 = 3x3 (hearts A-9)
     deck_mix: tuple = (13, 13, 13) # cards per suit (spades, diamonds, clubs); trimmed from K down
     removed_cards: str = ""        # specific cards out of the deck, e.g. "2S,7S,KD"
 
@@ -23,7 +23,6 @@ class Config:
     die_sides: int = 6
     card_cost: int = 1                 # dice lost per extra card bet on (2 cards = 1, 3 cards = 2)
     mix_penalty: tuple = (0, 1, 2)     # additional dice lost for betting on 1 / 2 / 3 pitch types
-    batter_ones: str = "any"           # contact roll: any 1 = swing and miss | all = only all 1s | off
     power_rule: str = "reserve"        # reserve = unbet dice | all_but_contact = every die not on the hit card
     power_keep: int = 0                # power = sum of the highest k power dice (0 = all)
     power_thresholds: tuple = (14, 19, 22, 23)  # min power sum for 1B, 2B, 3B, HR
@@ -37,10 +36,10 @@ class Config:
     bonus_applies: str = "both"        # multiples bonus adds to: both | pitcher (strike roll) | batter (difficulty)
 
     # --- Contact (batter) ---
+    one_whiffs: bool = True            # contact dice roll one at a time: a 1 = swing and miss
+    six_hits: bool = True              # a 6 (top face) = ball in play
     difficulty_floor: int = 0
     tie_rule: str = "foul"             # contact sum == difficulty: foul | play
-    chase_rule: str = "contest"        # swing at a suit-mismatch card with dice on it: contest | whiff
-    chase_penalty: int = 0             # extra difficulty when contesting a ball
 
     # --- Pitcher AI ---
     pitcher_keep: int = 3              # cards held back (incl. the pitch card) when building the zone
@@ -71,7 +70,6 @@ LEVERS = [
     ("die_sides", "Batter dice", "Die sides", "d6, d8, ..."),
     ("card_cost", "Batter dice", "Cost per extra card", "dice"),
     ("mix_penalty", "Batter dice", "Mix penalty", "extra dice for 1,2,3 types"),
-    ("batter_ones", "Batter dice", "Contact 1s whiff", "any | all | off"),
     ("power_rule", "Batter dice", "Power dice", "reserve | all_but_contact"),
     ("power_keep", "Batter dice", "Power keeps best", "k dice (0 = all)"),
     ("power_thresholds", "Batter dice", "Power thresholds", "1B,2B,3B,HR min sums"),
@@ -81,10 +79,10 @@ LEVERS = [
     ("suit_bonus_min", "Strike roll", "Multiples bonus starts at", "cards"),
     ("suit_bonus_per_card", "Strike roll", "Multiples bonus per card", "+n"),
     ("bonus_applies", "Strike roll", "Multiples bonus applies to", "both | pitcher | batter"),
+    ("one_whiffs", "Contact", "Rolling a 1 = swing and miss", "true | false"),
+    ("six_hits", "Contact", "Rolling a 6 = hit", "true | false"),
     ("difficulty_floor", "Contact", "Difficulty floor", ""),
     ("tie_rule", "Contact", "Tie goes to", "foul | play"),
-    ("chase_rule", "Contact", "Swing at a ball", "contest | whiff"),
-    ("chase_penalty", "Contact", "Chase penalty", "+difficulty"),
     ("pitcher_keep", "Pitcher AI", "Cards held back", ""),
     ("pitcher_temp", "Pitcher AI", "Unpredictability", "temperature"),
     ("zone_bias", "Pitcher AI", "Zone bias", "+/- strike intent"),
@@ -144,8 +142,6 @@ def validate(cfg):
         raise ValueError("power_rule must be reserve or all_but_contact")
     if cfg.tie_rule not in ("foul", "play"):
         raise ValueError("tie_rule must be foul or play")
-    if cfg.chase_rule not in ("contest", "whiff"):
-        raise ValueError("chase_rule must be contest or whiff")
     if not 1 <= cfg.max_grid <= 9:
         raise ValueError("max_grid must be 1-9")
     if cfg.grid_size not in (2, 3):
@@ -158,8 +154,6 @@ def validate(cfg):
         raise ValueError(f"removed_cards: unknown cards {sorted(bad)} (use rank+suit like 2S, TD, KC)")
     if len(deck(cfg)) < 2:
         raise ValueError("the deck needs at least 2 cards")
-    if cfg.batter_ones not in ("any", "all", "off"):
-        raise ValueError("batter_ones must be any, all or off")
     if cfg.bonus_applies not in ("both", "pitcher", "batter"):
         raise ValueError("bonus_applies must be both, pitcher or batter")
     if cfg.command_sides < 2:

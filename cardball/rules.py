@@ -74,33 +74,36 @@ def bip_value(n, cfg):
     return sum(p * WOBA[o] for o, p in probs.items())
 
 
+def contact_step(total, face, d, sides, one_whiffs, six_hits, tie_play):
+    """One contact die. Returns (result, new total); result is "play", "whiff" or None (keep rolling)."""
+    if face == 1 and one_whiffs:
+        return "whiff", total
+    if face == sides and six_hits:
+        return "play", total + face
+    total += face
+    if total > d or (tie_play and total == d):
+        return "play", total
+    return None, total
+
+
 @lru_cache(maxsize=None)
-def _sum_pmf_no_ones(n, sides):
-    """P(no die shows 1 and the sum = k), indexed by k."""
-    pmf = [1.0]
+def contact_probs(n, sides, d, one_whiffs, six_hits, tie_play):
+    """(P in play, P foul) rolling up to n dice one at a time vs difficulty d; the rest is a whiff."""
+    play = whiff = 0.0
+    alive = {0: 1.0}
     for _ in range(n):
-        nxt = [0.0] * (len(pmf) + sides)
-        for k, p in enumerate(pmf):
-            if p:
-                for f in range(2, sides + 1):
-                    nxt[k + f] += p / sides
-        pmf = nxt
-    return tuple(pmf)
-
-
-@lru_cache(maxsize=None)
-def contact_probs(n, sides, d, ones, tie_play):
-    """(P in play, P foul) for n contact dice vs difficulty d; the rest is a whiff on 1s."""
-    if n <= 0:
-        return 0.0, 0.0
-    if ones == "any":
-        pmf = _sum_pmf_no_ones(n, sides)
-    else:
-        pmf = list(sum_pmf(n, sides))
-        if ones == "all":
-            pmf[n] -= (1 / sides) ** n
-    play = sum(p for k, p in enumerate(pmf) if k > d or (tie_play and k == d))
-    return play, sum(pmf) - play
+        nxt = {}
+        for t, p in alive.items():
+            for f in range(1, sides + 1):
+                res, nt = contact_step(t, f, d, sides, one_whiffs, six_hits, tie_play)
+                if res == "play":
+                    play += p / sides
+                elif res == "whiff":
+                    whiff += p / sides
+                else:
+                    nxt[nt] = nxt.get(nt, 0.0) + p / sides
+        alive = nxt
+    return play, sum(alive.values())
 
 
 def suit_bonus(zone_cards, s, cfg):
@@ -132,8 +135,8 @@ def is_strike_roll(r, diff, bonus, sides):
     return r == sides or (r != 1 and r + bonus >= diff)
 
 
-def batter_difficulty(diff, cfg, chase=False, bonus=0):
-    return max(cfg.difficulty_floor, diff + bonus) + (cfg.chase_penalty if chase else 0)
+def batter_difficulty(diff, cfg, bonus=0):
+    return max(cfg.difficulty_floor, diff + bonus)
 
 
 def suits_bet(bets, grid):
@@ -162,14 +165,6 @@ def roll(rng, n, sides):
     return [rng.randint(1, sides) for _ in range(n)]
 
 
-def _contact_whiffs(dice, ones):
-    if ones == "any":
-        return 1 in dice
-    if ones == "all":
-        return all(v == 1 for v in dice)
-    return False
-
-
 def resolve_pitch(grid, reveal, location, bets, cfg, rng):
     """
     Resolve one pitch. grid: {cell: card}, reveal: card or None, location: cell or None,
@@ -181,7 +176,7 @@ def resolve_pitch(grid, reveal, location, bets, cfg, rng):
     pen = bet_penalty(bets, grid, cfg)
     swing = bool(bets)
     rec = {
-        "reveal": reveal, "location": location, "target": target, "strike": False,
+        "reveal": reveal, "location": location, "target": target, "strike": None, "p_strike": 0.0,
         "bets": bets, "swing": swing, "penalty": pen, "difficulty": None, "parts": None,
         "command_roll": None, "command_bonus": 0, "difference": None,
         "contact_roll": [], "contact_sum": None, "power_roll": [], "power_total": None,
@@ -190,12 +185,16 @@ def resolve_pitch(grid, reveal, location, bets, cfg, rng):
     if target is not None and reveal is not None:
         diff = difference(target, reveal, cfg)
         bonus = command_bonus(target, list(grid.values()), cfg)
-        r = rng.randint(1, cfg.command_sides)
-        rec.update(difference=diff, command_bonus=bonus, command_roll=r,
-                   strike=is_strike_roll(r, diff, bonus, cfg.command_sides))
-    strike = rec["strike"]
+        rec.update(difference=diff, command_bonus=bonus, p_strike=p_strike(diff, bonus, cfg.command_sides))
 
+    # The strike roll only happens on a take; a swing goes straight to contact
     if not swing:
+        strike = False
+        if target is not None and reveal is not None:
+            r = rng.randint(1, cfg.command_sides)
+            strike = is_strike_roll(r, rec["difference"], rec["command_bonus"], cfg.command_sides)
+            rec["command_roll"] = r
+        rec["strike"] = strike
         rec["event"] = "called_strike" if strike else "ball"
         return rec
 
@@ -203,21 +202,24 @@ def resolve_pitch(grid, reveal, location, bets, cfg, rng):
     if target is None or n == 0:
         rec["event"], rec["whiff_reason"] = "whiff", "missed"
         return rec
-    if not strike and cfg.chase_rule == "whiff":
-        rec["event"], rec["whiff_reason"] = "whiff", "chase"
-        return rec
-
     bb = batter_bonus(target, list(grid.values()), cfg)
-    d = batter_difficulty(rec["difference"], cfg, chase=not strike, bonus=bb)
+    d = batter_difficulty(rec["difference"], cfg, bonus=bb)
     rec["difficulty"] = d
     rec["parts"] = {"zone": value(target, cfg.face_value), "reveal": value(reveal, cfg.face_value),
-                    "suit_bonus": bb, "chase": cfg.chase_penalty if not strike else 0, "total": d}
-    rec["contact_roll"] = roll(rng, n, cfg.die_sides)
-    s = sum(rec["contact_roll"])
-    rec["contact_sum"] = s
-    if _contact_whiffs(rec["contact_roll"], cfg.batter_ones):
+                    "suit_bonus": bb, "total": d}
+    # Roll the bet dice one at a time; stop on a 1 (whiff), a 6 (hit) or once the total beats d
+    total, res = 0, None
+    for _ in range(n):
+        face = rng.randint(1, cfg.die_sides)
+        rec["contact_roll"].append(face)
+        res, total = contact_step(total, face, d, cfg.die_sides, cfg.one_whiffs, cfg.six_hits, cfg.tie_rule == "play")
+        if res:
+            break
+    rec["contact_sum"] = total
+    rec["contact_dice"] = n
+    if res == "whiff":
         rec["event"], rec["whiff_reason"] = "whiff", "ones"
-    elif s > d or (s == d and cfg.tie_rule == "play"):
+    elif res == "play":
         avail = cfg.batter_dice - pen
         pdice = avail - sum(bets.values()) if cfg.power_rule == "reserve" else avail - n
         rec["power_dice"] = pdice

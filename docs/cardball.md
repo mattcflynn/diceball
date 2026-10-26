@@ -8,7 +8,7 @@ A rework of Diceball. The pitcher plays cards into a 3×3 strike zone; the batte
 uv run -m cardball.server                     # playtest UI at http://localhost:8765 (opens the browser)
 uv run -m cardball.server --preset ''         # raw lever defaults, untuned
 uv run -m cardball.sim run -n 2000            # AI vs AI stats vs the 2026 season
-uv run -m cardball.sim run -n 2000 --config cardball/presets/v2_tuned.json --set grid_size=2 deck_mix=9,13,13
+uv run -m cardball.sim run -n 2000 --config cardball/presets/v2_tuned.json --set grid_size=3 one_whiffs=false
 uv run -m cardball.sim sweep card_cost 0 1 2 -n 1500 --config cardball/presets/v2_tuned.json
 uv run -m cardball.sim tune -n 1500 --levers t1 t2 t3 t4 zone_bias --out cardball/presets/mine.json
 ```
@@ -21,23 +21,23 @@ uv run -m cardball.sim tune -n 1500 --levers t1 t2 t3 t4 zone_bias --out cardbal
 - **Pitch vs AI**: click a hand card, then a cell, to place it (click a placed card to take it back). Click a card and then the *Pitch card* slot (or double-click the card), pick a ♥ location (only cells holding a zone card are allowed), and Throw. The preview shows the difference, your strike chance and what the batter needs before you commit. **AI suggest** fills in what the AI pitcher would do.
 - **Watch AI vs AI**: step through, or press Auto. *Peek* shows the secret pitch before the swing.
 - **Played cards** shows the whole deck as outlines; cards fill in once they've been seen (zone cards still on the table are ringed).
-- **Levers** edits every rule and AI setting and loads presets. *Table* holds the grid size (2 = 2×2, 3 = 3×3), *Deck mix* (cards per suit, trimmed from K down) and *Removed cards*: click cards in the deck grid to take specific ones out (click again to put back). **Simulate** runs N at-bats with the current levers and shows the same tables as the CLI.
+- **Levers** edits every rule and AI setting and loads presets. *Table* holds the grid size (2 = 2×2, the default; 3 = 3×3), *Deck mix* (cards per suit, trimmed from K down) and *Removed cards*: click cards in the deck grid to take specific ones out (click again to put back). **Simulate** runs N at-bats with the current levers and shows the same tables as the CLI.
 
 ## Rules as implemented (v2, October 26 2026)
 
 Deck: spades, diamonds and clubs (13 each by default; `deck_mix` trims a suit from K down, and `removed_cards` takes out specific cards, e.g. `2S,7S,KD`). ♠ = fastball, ♦ = off-speed, ♣ = breaking ball. A = 1, 2–10 face value, J/Q/K = 10. Hearts are the location cards, one per cell, laid out like a phone keypad:
 
 ```
-3x3:  A 2 3      2x2:  A 2
-      4 5 6            3 4
-      7 8 9
+2x2 (default):  A 2      3x3:  A 2 3
+                3 4            4 5 6
+                               7 8 9
 ```
 
 1. The pitcher draws 10 (`hand_size`) at the start of each at-bat.
 2. **Pitch**: the pitcher plays cards face up into the zone (up to one per cell), then secretly sets aside one hand card as the **pitch card** plus a heart for the **location**. The location must be a cell holding a zone card. The pitch type is the suit of the targeted zone card.
 3. **Swing or take**: the batter sees the zone, the pitcher's hand count and every card played so far. To swing, they bet dice on zone cards. Spreading costs dice: `card_cost` (1) per card beyond the first, plus `mix_penalty` for 2 or 3 pitch types (1 / 2). Two cards of different suits therefore cost 2 dice. No dice bet = take.
-4. **Strike roll**: difference = zone card value − pitch card value. The pitcher rolls 1d6 (`command_sides`): a 1 is always a ball, a 6 is always a strike, otherwise it's a strike when roll + multiples bonus ≥ difference. Multiples bonus = the number of zone cards sharing the target card's suit, once there are at least 2 (`suit_bonus_min`). By default it applies to both sides (`bonus_applies`): it helps the strike roll and also adds to the batter's difficulty.
-5. **Contact**: roll the dice bet on the located card. Any 1 = swing and miss (`batter_ones`). Otherwise, sum > difference + multiples bonus = in play; less = foul. No dice on the located card = swing and miss. A swing at a ball is contested (`chase_rule` default) or a swing and miss (`chase_rule=whiff`, what the tuned preset uses).
+4. **Take → strike roll**: only if the batter takes. Difference = zone card value − pitch card value. The pitcher rolls 1d6 (`command_sides`): a 1 is always a ball, a 6 is always a strike, otherwise it's a strike when roll + multiples bonus ≥ difference. Multiples bonus = the number of zone cards sharing the target card's suit, once there are at least 2 (`suit_bonus_min`). By default it applies to both sides (`bonus_applies`): it helps the strike roll and also adds to the batter's difficulty.
+5. **Swing → contact roll** (no strike roll, so a swing never knows if it was a ball): the batter rolls the dice bet on the located card **one at a time**, keeping a running total, up to as many dice as they bet. A 1 ends the swing as a swing and miss (`one_whiffs`). A 6 ends it as a hit, i.e. a ball in play (`six_hits`). Once the total beats difference + multiples bonus, the ball is in play. Running out of dice first = foul. No dice on the located card = swing and miss. More dice means more chances to get there, but also more chances to roll a 1 first.
 6. **Power**: on a ball in play, roll the dice not bet (`power_rule=reserve`) and compare the sum (or the best `power_keep`) to `power_thresholds` (1B / 2B / 3B / HR).
 7. After each pitch, all played cards go face up into rows by suit, and the pitcher draws 3 (`draw_per_pitch`). The batter gets all dice back.
 8. After each at-bat, everything is reshuffled and the pitcher draws 10 again.
@@ -51,11 +51,11 @@ Each of these is a lever, so the alternatives can be simulated.
 | Question | Default | Lever |
 |---|---|---|
 | Which roll does the multiples bonus help? | Both: the strike roll and the batter's difficulty | `bonus_applies`: `both` / `pitcher` / `batter` |
-| "A 1 is always a swing and miss" with several dice? | Any die showing 1 | `batter_ones`: `any` / `all` / `off` |
-| Swing at a ball? | Contested like a strike | `chase_rule`: `contest` / `whiff`, `chase_penalty` |
+| "1 = whiff, 6 = hit" with several dice? | Roll one at a time; the first 1 or 6 ends the swing (a 1 after the total already got there never happens, because rolling stops) | `one_whiffs`, `six_hits` |
+| Does a swing trigger the strike roll? | No: the strike roll only happens on a take | — |
 | Which dice roll for power? | Dice not bet ("reserve"). Dice lost to spreading are gone. | `power_rule`: `reserve` / `all_but_contact` |
 | Contact sum equals difference? | Foul | `tie_rule`: `foul` / `play` |
-| Pitch card worth more than the zone card? | Batter difficulty floors at 0; the strike roll only fails on a 1 | `difficulty_floor` |
+| Pitch card worth more than the zone card? | Batter difficulty floors at 0; a take is a strike unless the roll is a 1 | `difficulty_floor` |
 | Fewer cards of a suit: which ones go? | Trimmed from K down (a 9-spade deck is A–9♠), or pick exact cards | `deck_mix`, `removed_cards` |
 | Deck runs out mid-at-bat | Played rows shuffle back in | `reshuffle_when_empty` |
 
@@ -76,29 +76,25 @@ The batter knows the pitcher's policy, but the pitcher doesn't model the batter.
 
 ## Findings (v2)
 
-Presets: `v2_tuned` (the playtest default) keeps "any 1 whiffs", and sets `card_cost=0`, `power_keep=3`, thresholds 15/17/18/18 and `chase_rule=whiff`. `v2_all_ones` only whiffs on all 1s and uses 9 batter dice.
+Presets, both on the default 2×2 grid with `card_cost=1`, `power_keep=4` and `batter_temp=0.03`:
+- **`v2_tuned`** (the playtest default): the rules as written, so 1 = swing and miss and 6 = hit. Thresholds 20/22/24/24, `zone_bias=+0.05`.
+- **`v2_no_ones`**: `one_whiffs=false`. Thresholds 21/22/24/24, `zone_bias=+0.1`.
 
-The multiples bonus applying to both sides (October 26) moves `v2_tuned` from .258/.316/.451, 53% K, 7.8% BB to **.233/.308/.416, 56% K, 9.7% BB** (8,000 PA). The table below was measured before that change, with the bonus on the strike roll only (`bonus_applies=pitcher`).
-
-| 8,000 PA (raw: 4,000) | BA | OBP | SLG | K% | BB% | HR/PA | P/PA |
+| 8,000 PA | BA | OBP | SLG | K% | BB% | HR/PA | P/PA |
 |---|---|---|---|---|---|---|---|
 | 2026 MLB | .244 | .319 | .401 | 22.1% | 8.9% | ~2.9% | ~3.9 |
-| `v2_tuned` | .258 | .316 | .451 | **53.4%** | 7.8% | 4.0% | 3.70 |
-| `v2_all_ones` | .252 | .317 | .421 | **50.2%** | 8.7% | 3.3% | 3.72 |
-| `v2_tuned` + `card_cost=1` | .217 | .300 | .390 | 58.2% | 10.7% | 3.5% | 3.91 |
-| `v2_tuned` + 2×2 grid | .274 | .328 | .468 | 52.6% | 7.5% | 3.9% | 3.61 |
-| raw defaults | .682 | .682 | 2.267 | 31.4% | 0.0% | 46.3% | 2.44 |
+| `v2_tuned` | .285 | .319 | .448 | **40.0%** | 4.7% | 1.8% | 3.57 |
+| `v2_no_ones` | .243 | .308 | .427 | 26.4% | 8.6% | 1.8% | 4.20 |
+| `v2_tuned` on 3×3 (4,000 PA) | .314 | .343 | .488 | 34.5% | 4.2% | — | — |
 
-1. **The strike roll brought walks back.** Under v1, ball vs strike was a hidden suit match the batter couldn't read, so walks were 0%. Now the batter can estimate the strike chance from the visible zone card values (bigger zone cards mean bigger differences and more balls). The AI takes more when that chance is low, and walks land at 8–9% with no "batter's eye".
-2. **A swing at a ball has to be a whiff.** If it's contested, swinging always beats taking (98–100% swing rate) and walks vanish again.
-3. **Strikeouts are the open problem (~50%).** Contact is ~30% of swings vs 76% in MLB. Whiffs per swing in `v2_tuned`: 37% chasing a ball, 25% dice on the wrong card, 9% rolling a 1. Chase% (48%) is still close to Z-Swing% (61%), because the batter commits before the strike roll. Ideas:
-   - A swing at a ball fouls off instead of whiffing.
-   - A whiff on the wrong card becomes a foul when the card is adjacent to the location.
-   - The pitcher shows the strike roll before the batter commits (then the batter knows ball/strike, but not where).
-4. **The tuner turns `card_cost` off.** At `card_cost=1`, K rises to 58%: covering both cards of a 2-card zone costs a die, so the AI guesses one card instead.
-5. **"Any 1 whiffs" punishes stacking dice.** The chance of no 1s on n dice is (5/6)ⁿ: 83% with one die, 48% with four. The AI responds by betting few dice per card (~2.4 per swing) and keeping 7 for power. Under `all`, 1s barely matter (2% of swings).
-6. **The zone is still 2 cards after the first pitch** (`draw − 1`), on either grid size. The 2×2 grid plays almost the same as 3×3 once the first pitch is gone.
-7. **The pitch mix is still 33/33/33**, because the pitcher's choices don't depend on suit. `deck_mix` is the lever for a fastball-heavy pitcher (e.g. `13,9,9`).
+1. **"1 = swing and miss" is the biggest strikeout lever.** With one-at-a-time contact, a 1 ends 16% of swings. Turning it off takes K from 40% to 26% and brings contact to 71% (MLB 76%). `v2_no_ones` is the closest fit so far.
+2. **Wrong-card whiffs are now the main strikeout source** (29–35% of swings): dice on a card the pitch didn't target. A 2×2 zone after pitch one is usually 2 cards, and covering both costs a die (`card_cost`).
+3. **The strike roll only happens on a take, so walks depend on swings not being too lucrative.** The batter takes when the strike roll looks likely to fail. If hitting is strong, swinging always wins and walks vanish (the raw lever defaults: .698 BA, 0% BB).
+4. **Spread costs work as written.** `card_cost=1` plus `mix_penalty` 0/1/2: two cards of two suits cost 2 dice. The playtest shows the breakdown, e.g. "−2 dice (1 for 2 cards + 1 for 2 pitch types)".
+5. **Power is still coarse.** Best-4 of d6 (4–24) is the finest scale that works so far. The singles threshold is knife-edge (20 → 21 drops BA from .286 to .170), and triples collapse into HR at 24. Ideas: more power dice kept, a d8 power die, or a separate triple roll.
+6. **The zone is ~2 cards after the first pitches** (`draw − 1`). On 2×2 the first two pitches show 4 cards. The pitch mix is 33/33/33, because suit doesn't change the pitcher's odds. `deck_mix` and `removed_cards` are the levers for a fastball-heavy pitcher.
+
+Zone%, Chase% and Z-Swing% are computed from each pitch's strike chance, since swings never roll it.
 
 ### v1 history (suit-match strikes, October 25)
 

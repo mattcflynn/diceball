@@ -84,10 +84,21 @@ function dieEl(v, cls = "") {
 function suitsBet(b, grid) {
   return new Set(Object.entries(b).filter(([, n]) => n > 0).map(([c]) => suitOf(grid[c])));
 }
-function penaltyFor(b, grid) {
+function penaltyParts(b, grid) {
   const cards = Object.values(b).filter(n => n > 0).length;
-  if (!cards) return 0;
-  return S.cfg.card_cost * (cards - 1) + S.cfg.mix_penalty[suitsBet(b, grid).size - 1];
+  if (!cards) return { cards: 0, mix: 0, total: 0, nCards: 0, nTypes: 0 };
+  const nTypes = suitsBet(b, grid).size;
+  const c = S.cfg.card_cost * (cards - 1), m = S.cfg.mix_penalty[nTypes - 1];
+  return { cards: c, mix: m, total: c + m, nCards: cards, nTypes };
+}
+function penaltyFor(b, grid) { return penaltyParts(b, grid).total; }
+function penaltyText(b, grid) {
+  const p = penaltyParts(b, grid);
+  if (!p.total) return "";
+  const bits = [];
+  if (p.cards) bits.push(`${p.cards} for ${p.nCards} cards`);
+  if (p.mix) bits.push(`${p.mix} for ${p.nTypes} pitch types`);
+  return `−${p.total} dice (${bits.join(" + ")})`;
 }
 function betTotal(b) { return Object.values(b).reduce((a, n) => a + n, 0); }
 
@@ -255,7 +266,7 @@ function renderTray(active) {
   const powerNote = S.cfg.power_rule === "reserve" ? `${reserve} power dice` : `power = all dice not on the hit card`;
   const keep = S.cfg.power_keep > 0 ? ` (best ${S.cfg.power_keep} count)` : "";
   $("tray-summary").innerHTML = bet
-    ? `Bet <b>${bet}</b> on ${nCards} card${nCards > 1 ? "s" : ""} · ${k} pitch type${k > 1 ? "s" : ""}${pen ? ` → <b>−${pen}</b> dice for spreading` : ""} · ${powerNote}${keep}`
+    ? `Bet <b>${bet}</b> on ${nCards} card${nCards > 1 ? "s" : ""} · ${k} pitch type${k > 1 ? "s" : ""}${pen ? ` → <b>${penaltyText(useBets, grid)}</b>` : ""} · ${powerNote}${keep}`
     : `No dice bet. ${N} dice. Taking = no swing.`;
   ["btn-swing", "btn-take", "btn-clear", "btn-suggest"].forEach(id => $(id).disabled = !active);
   $("btn-swing").disabled = !active || bet === 0;
@@ -326,8 +337,8 @@ function renderPitcher() {
     const bb = ba !== "pitcher" ? sb : 0;
     const d = Math.max(S.cfg.difficulty_floor, diff + bb);
     pv = `${PNAME[suitOf(target)]} at ${CELL_LABEL(draft.location)} · difference ${cardValue(target)} − ${cardValue(draft.reveal)} = <b>${diff}</b>. ` +
-      `Strike chance <b>${pct(strikeChance(diff, bonus), 0)}</b> (d${S.cfg.command_sides}${bonus ? ` + ${bonus}` : ""} ≥ ${diff}; 1 = ball, ${S.cfg.command_sides} = strike). ` +
-      `Batter needs more than <b>${d}</b> to make contact${bb ? ` (${diff} + ${bb} multiples)` : ""}.`;
+      `If the batter swings, they need more than <b>${d}</b> to make contact${bb ? ` (${diff} + ${bb} multiples)` : ""}. ` +
+      `If they take, strike chance <b>${pct(strikeChance(diff, bonus), 0)}</b> (d${S.cfg.command_sides}${bonus ? ` + ${bonus}` : ""} ≥ ${diff}; 1 = ball, ${S.cfg.command_sides} = strike).`;
   }
   $("pitch-preview").innerHTML = pv;
   $("btn-throw").disabled = !(draft.location && (draft.reveal || !S.hand.length));
@@ -362,30 +373,38 @@ function renderResult() {
   if (!L.reveal) r.appendChild(el("div", "small", "Pitcher had no cards: automatic ball."));
   else {
     r.appendChild(el("div", "small", `${PNAME[suitOf(target)]} at ${CELL_LABEL(L.location)}: ${rankLabel(target)}${SUIT_SYM[suitOf(target)]} − ${rankLabel(L.reveal)}${SUIT_SYM[suitOf(L.reveal)]} = difference <b>${L.difference}</b>`));
-    const row = el("div", "dice-row");
-    row.appendChild(dieEl(L.command_roll, "roll pitcher"));
-    const sides = S.cfg.command_sides;
-    const how = L.command_roll === 1 ? "a 1 is always a ball" : L.command_roll === sides ? `a ${sides} is always a strike`
-      : `${L.command_roll}${L.command_bonus ? ` + ${L.command_bonus}` : ""} ${L.strike ? "≥" : "<"} ${L.difference}`;
-    row.appendChild(el("span", "small", `&nbsp;${how} → <b>${L.strike ? "strike" : "ball"}</b>`));
-    r.appendChild(el("div", "small muted", "Pitcher's strike roll"));
-    r.appendChild(row);
+    if (L.command_roll === null) {
+      r.appendChild(el("div", "small muted", `Batter swung, so no strike roll (it was ${pct(L.p_strike, 0)} to be a strike).`));
+    } else {
+      const row = el("div", "dice-row");
+      row.appendChild(dieEl(L.command_roll, "roll pitcher"));
+      const sides = S.cfg.command_sides;
+      const how = L.command_roll === 1 ? "a 1 is always a ball" : L.command_roll === sides ? `a ${sides} is always a strike`
+        : `${L.command_roll}${L.command_bonus ? ` + ${L.command_bonus}` : ""} ${L.strike ? "≥" : "<"} ${L.difference}`;
+      row.appendChild(el("span", "small", `&nbsp;${how} → <b>${L.strike ? "strike" : "ball"}</b>`));
+      r.appendChild(el("div", "small muted", "Pitcher's strike roll (batter took)"));
+      r.appendChild(row);
+    }
   }
 
   const betStr = Object.entries(L.bets).map(([c, n]) => `${n} on ${CELL_LABEL(c)}`).join(", ");
-  r.appendChild(el("div", "small muted", L.swing ? `Swing: ${betStr}${L.penalty ? ` (−${L.penalty} dice for spreading)` : ""}` : "No swing."));
-  if (L.whiff_reason === "chase") r.appendChild(el("div", "small", "Swung at a ball: <b>swing and miss</b>."));
+  r.appendChild(el("div", "small muted", L.swing ? `Swing: ${betStr}${L.penalty ? ` (${penaltyText(L.bets, L.grid)})` : ""}` : "No swing."));
+  if (L.whiff_reason === "missed") r.appendChild(el("div", "small", `No dice on the pitch's card: <b>swing and miss</b>.`));
 
   if (L.parts) {
     const p = L.parts;
-    r.appendChild(el("div", "math", `Difficulty ${p.zone} − ${p.reveal}` + (p.suit_bonus ? ` + ${p.suit_bonus} multiples` : "") + (p.chase ? ` + ${p.chase} chase` : "") + ` = <b>${p.total}</b>`));
+    r.appendChild(el("div", "math", `Difficulty ${p.zone} − ${p.reveal}` + (p.suit_bonus ? ` + ${p.suit_bonus} multiples` : "") + ` = <b>${p.total}</b>`));
     const row = el("div", "dice-row");
-    const ones = L.whiff_reason === "ones";
-    L.contact_roll.forEach(v => row.appendChild(dieEl(v, "roll" + (ones && v === 1 ? " one" : ""))));
-    const ok = L.event === "in_play";
-    row.appendChild(el("span", "small", ones ? `&nbsp;rolled a 1 → <b>swing and miss</b>`
-      : `&nbsp;= ${L.contact_sum} ${L.contact_sum > p.total ? ">" : L.contact_sum === p.total ? "=" : "<"} ${p.total} → ${ok ? "<b>contact</b>" : "foul"}`));
-    r.appendChild(el("div", "small muted", "Contact roll"));
+    const rolls = L.contact_roll, last = rolls[rolls.length - 1], top = S.cfg.die_sides;
+    rolls.forEach((v, i) => row.appendChild(dieEl(v, "roll" + (i === rolls.length - 1 && L.whiff_reason === "ones" ? " one" : ""))));
+    for (let i = rolls.length; i < L.contact_dice; i++) row.appendChild(dieEl(null, "unrolled"));
+    let why;
+    if (L.whiff_reason === "ones") why = `rolled a 1 → <b>swing and miss</b>`;
+    else if (L.event === "in_play" && S.cfg.six_hits && last === top) why = `rolled a ${top} → <b>hit</b>`;
+    else if (L.event === "in_play") why = `total ${L.contact_sum} > ${p.total} → <b>contact</b>`;
+    else why = `out of dice at ${L.contact_sum} (needed more than ${p.total}) → foul`;
+    row.appendChild(el("span", "small", `&nbsp;${why}`));
+    r.appendChild(el("div", "small muted", `Contact roll: one die at a time, up to ${L.contact_dice}`));
     r.appendChild(row);
   }
   if (L.event === "in_play") {
@@ -477,8 +496,15 @@ $("btn-auto").onclick = () => {
 
 document.querySelectorAll("#modes button").forEach(b => b.onclick = () => newGame(b.dataset.mode));
 
-function newGame(mode) {
+// Drop overrides for levers the server no longer has (e.g. after a restart with new rules)
+async function pruneOverrides() {
+  const known = new Set((await api("/api/levers")).levers.map(l => l.key));
+  overrides = Object.fromEntries(Object.entries(overrides).filter(([k]) => known.has(k)));
+}
+
+async function newGame(mode) {
   stopAuto();
+  await pruneOverrides();
   bets = {};
   resetDraft();
   act("/api/new", { mode: mode || S?.mode || "bat", config: overrides, preset: preset || undefined });
@@ -498,7 +524,7 @@ $("modal").onclick = e => { if (e.target.id === "modal") $("modal").classList.ad
 function leverValueStr(v) { return Array.isArray(v) ? v.join(",") : String(v); }
 
 async function leverForm(values) {
-  if (!leverMeta) leverMeta = await api("/api/levers");
+  leverMeta = await api("/api/levers");   // re-fetch: the server's levers change between restarts
   const wrap = el("div");
   const top = el("div", "buttons");
   const sel = el("select");
@@ -617,6 +643,7 @@ function openSim() {
     run.disabled = true;
     out.innerHTML = `<p class="muted">Simulating ${n.value} at-bats…</p>`;
     try {
+      await pruneOverrides();
       const r = await api("/api/sim", { n: Number(n.value), config: overrides, preset: preset || undefined });
       out.innerHTML = "";
       out.appendChild(simTables(r));
