@@ -1,5 +1,7 @@
 # Diceball Duel — User Manual
 
+> **New:** *Cardball*, a card-vs-dice rework with a browser playtest UI and simulator, lives in `cardball/`. See [docs/cardball.md](docs/cardball.md).
+
 ## What Is This?
 
 Diceball Duel is a two-player dice baseball simulation. One at-bat is the unit of play. The pitcher rolls dice to form a pitch combo; the hitter rolls to make contact and determine the hit outcome. Either player can be human or CPU.
