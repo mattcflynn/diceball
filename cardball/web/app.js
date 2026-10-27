@@ -94,11 +94,18 @@ function penaltyParts(b, grid) {
 function penaltyFor(b, grid) { return penaltyParts(b, grid).total; }
 function penaltyText(b, grid) {
   const p = penaltyParts(b, grid);
-  if (!p.total) return "";
   const bits = [];
   if (p.cards) bits.push(`${p.cards} for ${p.nCards} cards`);
   if (p.mix) bits.push(`${p.mix} for ${p.nTypes} pitch types`);
-  return `−${p.total} dice (${bits.join(" + ")})`;
+  const pw = S.cfg.spread_power * Math.max(0, p.nCards - 1);
+  if (!p.total) return pw ? `−${pw} power for ${p.nCards} cards` : "";
+  return `−${p.total} dice (${bits.join(" + ")})` + (pw ? `, −${pw} power` : "");
+}
+function rerollCost(b, grid) {
+  if (S.cfg.power_system === "sum") return 0;
+  const cards = Object.values(b).filter(n => n > 0).length;
+  if (!cards) return 0;
+  return S.cfg.reroll_card_cost * (cards - 1) + S.cfg.reroll_mix_penalty[suitsBet(b, grid).size - 1];
 }
 function betTotal(b) { return Object.values(b).reduce((a, n) => a + n, 0); }
 
@@ -263,11 +270,18 @@ function renderTray(active) {
   for (let i = 0; i < reserve; i++) t.appendChild(dieEl(null, "power"));
   const k = suitsBet(useBets, grid).size;
   const nCards = Object.keys(useBets).filter(c => useBets[c]).length;
-  const powerNote = S.cfg.power_rule === "reserve" ? `${reserve} power dice` : `power = all dice not on the hit card`;
-  const keep = S.cfg.power_keep > 0 ? ` (best ${S.cfg.power_keep} count)` : "";
+  const sys = S.cfg.power_system;
+  const used = sys === "sum" ? reserve : Math.min(reserve, S.cfg.hand_dice);
+  const powerNote = S.cfg.power_rule === "reserve" ? `${used} power dice${sys !== "sum" && reserve > used ? ` (${reserve - used} unused)` : ""}` : `power = all dice not on the hit card`;
+  const keep = sys === "sum" && S.cfg.power_keep > 0 ? ` (best ${S.cfg.power_keep} count)` : "";
+  let rr = "";
+  if (sys !== "sum") {
+    const cost = S.phase === "result" ? (S.last?.reroll_cost || 0) : rerollCost(useBets, grid);
+    rr = ` · re-rolls <b>${S.rerolls}</b>${cost ? ` (spread costs <b>${cost}</b>)` : ""}`;
+  }
   $("tray-summary").innerHTML = bet
-    ? `Bet <b>${bet}</b> on ${nCards} card${nCards > 1 ? "s" : ""} · ${k} pitch type${k > 1 ? "s" : ""}${pen ? ` → <b>${penaltyText(useBets, grid)}</b>` : ""} · ${powerNote}${keep}`
-    : `No dice bet. ${N} dice. Taking = no swing.`;
+    ? `Bet <b>${bet}</b> on ${nCards} card${nCards > 1 ? "s" : ""} · ${k} pitch type${k > 1 ? "s" : ""}${pen ? ` → <b>${penaltyText(useBets, grid)}</b>` : ""} · ${powerNote}${keep}${rr}`
+    : `No dice bet. ${N} dice${sys !== "sum" ? ` · re-rolls <b>${S.rerolls}</b>` : ""}. Taking = no swing.`;
   ["btn-swing", "btn-take", "btn-clear", "btn-suggest"].forEach(id => $(id).disabled = !active);
   $("btn-swing").disabled = !active || bet === 0;
 }
@@ -276,6 +290,7 @@ function addDie(c) {
   const grid = S.grid;
   const nb = { ...bets, [c]: (bets[c] || 0) + 1 };
   if (betTotal(nb) > S.cfg.batter_dice - penaltyFor(nb, grid)) return toast("Not enough dice (spreading costs dice)");
+  if (rerollCost(nb, grid) > S.rerolls) return toast("Not enough re-rolls (spreading costs re-rolls)");
   bets = nb;
   render();
 }
@@ -407,14 +422,31 @@ function renderResult() {
     r.appendChild(el("div", "small muted", `Contact roll: one die at a time, up to ${L.contact_dice}`));
     r.appendChild(row);
   }
-  if (L.event === "in_play") {
+  if (L.climb) {
+    const row = el("div", "dice-row");
+    L.climb.forEach(x => row.appendChild(dieEl(x.face, "roll" + (x.status === "rerolled" ? " unrolled" : x.status === "break" ? " one" : ""))));
+    const len = L.climb_length;
+    row.appendChild(el("span", "small", `&nbsp;streak of <b>${len}</b>${L.rerolls_used ? ` · ${L.rerolls_used} re-roll${L.rerolls_used > 1 ? "s" : ""} used` : ""}`));
+    const [c1, c2, c3] = S.cfg.climb_ladder;
+    r.appendChild(el("div", "small muted", `Climb (${L.power_dice} power dice, up to ${S.cfg.hand_dice} count): each die must be at least the last. Faded = re-rolled, red = broke the streak.`));
+    r.appendChild(row);
+    r.appendChild(el("div", "small muted", `${c1} = 1B · ${c2} = 2B (rising every die = 3B) · ${c3} = HR`));
+  } else if (L.hand) {
+    const row = el("div", "dice-row");
+    L.power_roll.forEach(v => row.appendChild(dieEl(v, "roll")));
+    row.appendChild(el("span", "small", `&nbsp;<b>${L.hand.replace("_", " ")}</b>${L.rerolls_used ? ` · ${L.rerolls_used} re-roll${L.rerolls_used > 1 ? "s" : ""}` : ""}`));
+    r.appendChild(el("div", "small muted", `Power hand (first roll ${L.power_first.join("-")})`));
+    r.appendChild(row);
+    r.appendChild(el("div", "small muted", S.cfg.hand_map));
+  } else if (L.event === "in_play") {
     const keep = S.cfg.power_keep;
     const sorted = [...L.power_roll].map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]);
     const counted = new Set(keep > 0 ? sorted.slice(0, keep).map(x => x[1]) : L.power_roll.map((_, i) => i));
     const row = el("div", "dice-row");
     L.power_roll.forEach((v, i) => row.appendChild(dieEl(v, "roll" + (counted.has(i) && keep > 0 ? " counted" : ""))));
     const [t1, t2, t3, t4] = S.cfg.power_thresholds;
-    row.appendChild(el("span", "small", `&nbsp;= <b>${L.power_total}</b>`));
+    const mod = L.power_mod || 0;
+    row.appendChild(el("span", "small", `&nbsp;${mod ? (mod > 0 ? `+ ${mod}` : `− ${-mod}`) + " " : ""}= <b>${L.power_total}</b>`));
     r.appendChild(el("div", "small muted", `Power roll (${L.power_dice} dice${keep > 0 ? `, best ${keep} count` : ""})`));
     r.appendChild(row);
     r.appendChild(el("div", "small muted", `1B ${t1}+ · 2B ${t2}+ · 3B ${t3}+ · HR ${t4}+`));

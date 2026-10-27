@@ -27,6 +27,17 @@ class Config:
     power_keep: int = 0                # power = sum of the highest k power dice (0 = all)
     power_thresholds: tuple = (14, 19, 22, 23)  # min power sum for 1B, 2B, 3B, HR
     power_bonus: int = 0               # flat add to power sum (hitter strength)
+    spread_power: int = 0              # power sum lost per extra card bet on (sitting on one zone = A swing)
+
+    # --- Power hand / climb (power_system = hand | climb) ---
+    power_system: str = "sum"          # sum = power thresholds | hand = Yahtzee-style hand | climb = streak of non-dropping dice
+    climb_ladder: tuple = (3, 4, 5)    # climb streak lengths for 1B, 2B, HR (a strictly rising 2B streak = 3B)
+    hand_dice: int = 5                 # most power dice rolled for the hand
+    hand_map: str = "trips=SINGLE,straight=DOUBLE,four_kind=TRIPLE,full_house=HR,five_kind=HR"  # unlisted hands = out
+    rerolls: int = 3                   # re-rolls per at-bat (each re-rolls one power die)
+    reroll_card_cost: int = 1          # re-rolls lost per extra card bet on
+    reroll_mix_penalty: tuple = (0, 1, 2)  # re-rolls lost for betting on 1 / 2 / 3 pitch types
+    reroll_per_ball: int = 0           # re-rolls earned for each ball taken (working the count)
 
     # --- Strike roll (pitcher) ---
     command_sides: int = 6             # pitcher's die: 1 = always ball, max = always strike, else roll + bonus >= difference
@@ -74,6 +85,15 @@ LEVERS = [
     ("power_keep", "Batter dice", "Power keeps best", "k dice (0 = all)"),
     ("power_thresholds", "Batter dice", "Power thresholds", "1B,2B,3B,HR min sums"),
     ("power_bonus", "Batter dice", "Power bonus", "flat"),
+    ("spread_power", "Batter dice", "Power lost per extra card", "pips off power sum"),
+    ("power_system", "Power hand", "Power system", "sum | hand | climb"),
+    ("climb_ladder", "Power hand", "Climb lengths", "1B,2B,HR streaks"),
+    ("hand_dice", "Power hand", "Hand dice", "most power dice rolled (hand and climb)"),
+    ("hand_map", "Power hand", "Hand outcomes", "hand=1B/2B/3B/HR/FOUL; rest are outs"),
+    ("rerolls", "Power hand", "Re-rolls per at-bat", "one die each"),
+    ("reroll_card_cost", "Power hand", "Re-rolls per extra card", ""),
+    ("reroll_mix_penalty", "Power hand", "Re-roll mix penalty", "for 1,2,3 types"),
+    ("reroll_per_ball", "Power hand", "Re-rolls per ball taken", ""),
     ("command_sides", "Strike roll", "Pitcher die sides", "d6"),
     ("command_bonus", "Strike roll", "Pitcher roll bonus", "+n"),
     ("suit_bonus_min", "Strike roll", "Multiples bonus starts at", "cards"),
@@ -138,6 +158,14 @@ def validate(cfg):
         raise ValueError("power_thresholds must be 4 non-decreasing ints (1B,2B,3B,HR)")
     if len(cfg.mix_penalty) != 3:
         raise ValueError("mix_penalty must be 3 ints")
+    if cfg.power_system not in ("sum", "hand", "climb"):
+        raise ValueError("power_system must be sum, hand or climb")
+    if len(cfg.climb_ladder) != 3 or list(cfg.climb_ladder) != sorted(set(cfg.climb_ladder)) or cfg.climb_ladder[0] < 1:
+        raise ValueError("climb_ladder must be 3 increasing lengths (1B,2B,HR)")
+    if len(cfg.reroll_mix_penalty) != 3:
+        raise ValueError("reroll_mix_penalty must be 3 ints")
+    from cardball.hand import parse_map
+    parse_map(cfg.hand_map)
     if cfg.power_rule not in ("reserve", "all_but_contact"):
         raise ValueError("power_rule must be reserve or all_but_contact")
     if cfg.tie_rule not in ("foul", "play"):

@@ -152,6 +152,7 @@ class Session:
             "session": {"pa": pa, "outcomes": dict(o), "BA": h / abs_ if abs_ else 0,
                         "OBP": (h + o["BB"]) / pa if pa else 0, "SLG": tb / abs_ if abs_ else 0,
                         "history": self.history[-12:]},
+            "rerolls": (self.last or {}).get("rerolls_left", ab.rerolls) if self.phase == "result" else ab.rerolls,
             "cfg": config_mod.to_dict(self.cfg), "preset": self.preset, "deck_cards": list(deck(self.cfg)),
         })
 

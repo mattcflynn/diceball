@@ -1,0 +1,9 @@
+{
+  "power_system": "climb",
+  "batter_dice": 7,
+  "rerolls": 1,
+  "card_cost": 0,
+  "mix_penalty": [0, 0, 0],
+  "pitcher_keep": 7,
+  "batter_temp": 0.03
+}

@@ -15,6 +15,7 @@ class AtBat:
         self.pending = None        # (grid, reveal, location) once the pitcher commits
         self.read_row = None       # row the batter read, when batter_eye fires
         self.result = None
+        self.rerolls = cfg.rerolls if cfg.power_system != "sum" else 0
         self.draw(cfg.hand_size)
 
     @property
@@ -68,13 +69,16 @@ class AtBat:
             "deck_count": len(self.deck),
             "pitch_no": len(self.pitches) + 1,
             "read_row": self.read_row if self.pending else None,
+            "rerolls": self.rerolls,
         }
 
     def resolve(self, bets):
         if not self.pending:
             raise RuntimeError("no pitch committed")
         grid, reveal, location = self.pending
-        rec = resolve_pitch(grid, reveal, location, {int(c): n for c, n in bets.items()}, self.cfg, self.rng)
+        rec = resolve_pitch(grid, reveal, location, {int(c): n for c, n in bets.items()}, self.cfg, self.rng, self.rerolls)
+        self.rerolls -= rec["reroll_cost"] + rec["rerolls_used"]
+        rec["rerolls_left"] = self.rerolls
         rec["grid"] = dict(grid)
         rec["count_before"] = self.count
         rec["hand_after_play"] = len(self.hand)
@@ -82,6 +86,8 @@ class AtBat:
         ev = rec["event"]
         if ev == "ball":
             self.balls += 1
+            if self.cfg.power_system != "sum":
+                self.rerolls += self.cfg.reroll_per_ball
         elif ev in ("called_strike", "whiff"):
             self.strikes += 1
         elif ev == "foul" and self.strikes < 2:

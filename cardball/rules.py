@@ -68,9 +68,14 @@ def power_probs(n, sides, keep, thresholds, bonus):
     return out
 
 
-def bip_value(n, cfg):
-    """Expected wOBA of a ball in play hit with n power dice."""
-    probs = power_probs(n, cfg.die_sides, cfg.power_keep, tuple(cfg.power_thresholds), cfg.power_bonus)
+def power_mod(cards, cfg):
+    """Flat add to the power sum: hitter strength minus the cost of sitting on several cards."""
+    return cfg.power_bonus - cfg.spread_power * max(0, cards - 1)
+
+
+def bip_value(n, cfg, cards=1):
+    """Expected wOBA of a ball in play hit with n power dice, having bet on `cards` cards."""
+    probs = power_probs(n, cfg.die_sides, cfg.power_keep, tuple(cfg.power_thresholds), power_mod(cards, cfg))
     return sum(p * WOBA[o] for o, p in probs.items())
 
 
@@ -151,7 +156,15 @@ def bet_penalty(bets, grid, cfg):
     return cfg.card_cost * (cards - 1) + cfg.mix_penalty[len(suits_bet(bets, grid)) - 1]
 
 
-def validate_bets(bets, grid, cfg):
+def reroll_cost(bets, grid, cfg):
+    """Re-rolls lost for spreading (re-roll power systems)."""
+    cards = sum(1 for n in bets.values() if n > 0)
+    if not cards or cfg.power_system == "sum":
+        return 0
+    return cfg.reroll_card_cost * (cards - 1) + cfg.reroll_mix_penalty[len(suits_bet(bets, grid)) - 1]
+
+
+def validate_bets(bets, grid, cfg, rerolls=None):
     for c, n in bets.items():
         if n < 0:
             raise ValueError("negative bet")
@@ -159,19 +172,23 @@ def validate_bets(bets, grid, cfg):
             raise ValueError(f"bet on empty cell {c}")
     if sum(bets.values()) > cfg.batter_dice - bet_penalty(bets, grid, cfg):
         raise ValueError("bets exceed dice after spread penalty")
+    if rerolls is not None and reroll_cost(bets, grid, cfg) > rerolls:
+        raise ValueError("not enough re-rolls to spread that bet")
 
 
 def roll(rng, n, sides):
     return [rng.randint(1, sides) for _ in range(n)]
 
 
-def resolve_pitch(grid, reveal, location, bets, cfg, rng):
+def resolve_pitch(grid, reveal, location, bets, cfg, rng, rerolls=None):
     """
     Resolve one pitch. grid: {cell: card}, reveal: card or None, location: cell or None,
-    bets: {cell: dice}. Returns a record of everything that happened.
+    bets: {cell: dice}, rerolls: the batter's re-rolls left (hand system).
+    Returns a record of everything that happened.
     """
     bets = {c: n for c, n in bets.items() if n > 0}
-    validate_bets(bets, grid, cfg)
+    rerolls = cfg.rerolls if rerolls is None else rerolls
+    validate_bets(bets, grid, cfg, rerolls if cfg.power_system != "sum" else None)
     target = grid.get(location) if location else None
     pen = bet_penalty(bets, grid, cfg)
     swing = bool(bets)
@@ -180,7 +197,8 @@ def resolve_pitch(grid, reveal, location, bets, cfg, rng):
         "bets": bets, "swing": swing, "penalty": pen, "difficulty": None, "parts": None,
         "command_roll": None, "command_bonus": 0, "difference": None,
         "contact_roll": [], "contact_sum": None, "power_roll": [], "power_total": None,
-        "power_dice": 0, "event": None, "outcome": None, "whiff_reason": None,
+        "power_dice": 0, "power_mod": 0, "event": None, "outcome": None, "whiff_reason": None,
+        "reroll_cost": reroll_cost(bets, grid, cfg), "rerolls_used": 0, "hand": None,
     }
     if target is not None and reveal is not None:
         diff = difference(target, reveal, cfg)
@@ -223,8 +241,25 @@ def resolve_pitch(grid, reveal, location, bets, cfg, rng):
         avail = cfg.batter_dice - pen
         pdice = avail - sum(bets.values()) if cfg.power_rule == "reserve" else avail - n
         rec["power_dice"] = pdice
+        if cfg.power_system == "climb":
+            from cardball.hand import play_climb
+            c = play_climb(rng, pdice, rerolls - rec["reroll_cost"], cfg)
+            rec.update(power_roll=[x["face"] for x in c["rolls"]], climb=c["rolls"], climb_length=c["length"],
+                       rerolls_used=c["used"], event="in_play", outcome=c["outcome"])
+            return rec
+        if cfg.power_system == "hand":
+            from cardball.hand import play_hand
+            h = play_hand(rng, pdice, rerolls - rec["reroll_cost"], cfg)
+            rec.update(power_roll=h["dice"], power_first=h["first"], reroll_steps=h["rerolls"],
+                       rerolls_used=len(h["rerolls"]), hand=h["hand"])
+            if h["outcome"] == "FOUL":
+                rec["event"] = "foul"
+            else:
+                rec["event"], rec["outcome"] = "in_play", h["outcome"]
+            return rec
         rec["power_roll"] = roll(rng, pdice, cfg.die_sides)
-        rec["power_total"] = power_sum(rec["power_roll"], cfg.power_keep) + cfg.power_bonus
+        rec["power_mod"] = power_mod(len(bets), cfg)
+        rec["power_total"] = power_sum(rec["power_roll"], cfg.power_keep) + rec["power_mod"]
         rec["event"] = "in_play"
         rec["outcome"] = power_outcome(rec["power_total"], cfg.power_thresholds)
     else:

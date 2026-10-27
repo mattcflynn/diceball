@@ -15,6 +15,7 @@ from itertools import combinations
 from cardball.cards import deck, cells, suit, value
 from cardball.rules import WOBA, bip_value, batter_bonus, batter_difficulty, command_bonus, contact_probs, p_strike
 from cardball.game import row_of
+from cardball.hand import power_value
 
 # Rough MLB wOBA from each count
 DEFAULT_COUNT_VALUES = {
@@ -214,7 +215,15 @@ def batter_decide(view, cfg, rng):
                 fo += w * f
             play[c].append(pl)
             foul[c].append(fo)
-    B = [bip_value(r, cfg) for r in range(pool + 1)]
+    rr = view.get("rerolls", 0)
+    hand = cfg.power_system != "sum"
+    B = {m: [bip_value(r, cfg, m) for r in range(pool + 1)] for m in range(1, MAX_CELLS + 1)} if not hand else None
+
+    def bvec(m, k):
+        if not hand:
+            return B[m]
+        left = rr - cfg.reroll_card_cost * (m - 1) - cfg.reroll_mix_penalty[k - 1]
+        return [power_value(r, left, cfg, foul_v) for r in range(pool + 1)]
     tgt = bel["target"]
 
     def cell_val(c, n, bv):
@@ -239,22 +248,23 @@ def batter_decide(view, cfg, rng):
             mcells = [c for c in gcells if suit(grid[c]) in mask]
             M = min(len(mcells), MAX_CELLS)
             avail = {m: pool - cfg.mix_penalty[k - 1] - cfg.card_cost * (m - 1) for m in range(1, M + 1)}
-            avail = {m: a for m, a in avail.items() if a >= m}
+            avail = {m: a for m, a in avail.items() if a >= m
+                     and (not hand or cfg.reroll_card_cost * (m - 1) + cfg.reroll_mix_penalty[k - 1] <= rr)}
             if not avail:
                 continue
             base = bel["p_empty"] * whiff_v + sum(tgt.get(c, 0.0) * whiff_v for c in gcells if c not in mcells)
             if cfg.power_rule == "reserve":
-                top = max(avail.values())
-                for R in range(top):
-                    bv = B[R]
-                    dp, hist = _alloc_table(mcells, top - R, M, lambda c, n: cell_val(c, n, bv))
-                    for m, a in avail.items():
-                        t = a - R
-                        if t >= m and dp[m][t] > NEG:
+                for m, a in avail.items():
+                    Bm = bvec(m, k)
+                    for R in range(a - m + 1):
+                        bv, t = Bm[R], a - R
+                        dp, hist = _alloc_table(mcells, t, m, lambda c, n: cell_val(c, n, bv))
+                        if dp[m][t] > NEG:
                             consider(dp[m][t] + base, lambda: _backtrack(mcells, hist, m, t))
             else:
                 for m, a in avail.items():
-                    dp, hist = _alloc_table(mcells, a, m, lambda c, n: cell_val(c, n, B[a - n]))
+                    Bm = bvec(m, k)
+                    dp, hist = _alloc_table(mcells, a, m, lambda c, n: cell_val(c, n, Bm[a - n]))
                     t = max(range(m, a + 1), key=lambda i: dp[m][i])
                     if dp[m][t] > NEG:
                         consider(dp[m][t] + base, lambda: _backtrack(mcells, hist, m, t))

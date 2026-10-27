@@ -53,6 +53,7 @@ def _empty_tally():
         "zone": 0, "swings": 0, "z_swings": 0, "o_swings": 0, "contact": 0,
         "mix": Counter(), "grid_by_pitch": defaultdict(lambda: [0, 0]),
         "cells_bet": 0, "dice_bet": 0, "penalty": 0, "reserve_on_swing": 0, "whiff_reason": Counter(),
+        "reroll_cost": 0, "rerolls_used": 0,
         "power_hist": Counter(), "count_woba": defaultdict(lambda: [0.0, 0]),
     }
 
@@ -89,7 +90,10 @@ def _tally_ab(t, ab, cfg):
         if p["event"] in ("foul", "in_play"):
             t["contact"] += 1
         if p["event"] == "in_play":
-            t["power_hist"][p["power_total"]] += 1
+            t["power_hist"][p["hand"] or p["power_total"]] += 1
+        if p["swing"]:
+            t["reroll_cost"] += p["reroll_cost"]
+        t["rerolls_used"] += p["rerolls_used"]
 
 
 def _merge(a, b):
@@ -185,6 +189,8 @@ def summarize(t):
             "dice_bet_per_swing": t["dice_bet"] / sw if sw else 0,
             "penalty_per_swing": t["penalty"] / sw if sw else 0,
             "reserve_per_swing": t["reserve_on_swing"] / sw if sw else 0,
+            "reroll_cost_per_swing": t["reroll_cost"] / sw if sw else 0,
+            "rerolls_used_per_pa": t["rerolls_used"] / pa,
             "whiff_reason_per_swing": {k: v / sw for k, v in t["whiff_reason"].items()} if sw else {},
         },
         "power_hist": {str(k): v for k, v in sorted(t["power_hist"].items())},
@@ -199,7 +205,7 @@ TUNE_STEPS = {
     "t1": 1, "t2": 1, "t3": 1, "t4": 1, "zone_bias": 0.05, "batter_eye": 0.1, "batter_temp": 0.02, "pitcher_temp": 0.5,
     "batter_dice": 1, "hand_size": 1, "draw_per_pitch": 1, "power_bonus": 1, "suit_bonus_per_card": 1,
     "pitcher_keep": 1, "grid_noise": 0.05, "command_bonus": 1, "command_weight": 1.0,
-    "card_cost": 1, "suit_bonus_min": 1,
+    "card_cost": 1, "suit_bonus_min": 1, "spread_power": 1,
 }
 
 

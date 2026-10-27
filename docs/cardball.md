@@ -38,7 +38,7 @@ Deck: spades, diamonds and clubs (13 each by default; `deck_mix` trims a suit fr
 3. **Swing or take**: the batter sees the zone, the pitcher's hand count and every card played so far. To swing, they bet dice on zone cards. Spreading costs dice: `card_cost` (1) per card beyond the first, plus `mix_penalty` for 2 or 3 pitch types (1 / 2). Two cards of different suits therefore cost 2 dice. No dice bet = take.
 4. **Take → strike roll**: only if the batter takes. Difference = zone card value − pitch card value. The pitcher rolls 1d6 (`command_sides`): a 1 is always a ball, a 6 is always a strike, otherwise it's a strike when roll + multiples bonus ≥ difference. Multiples bonus = the number of zone cards sharing the target card's suit, once there are at least 2 (`suit_bonus_min`). By default it applies to both sides (`bonus_applies`): it helps the strike roll and also adds to the batter's difficulty.
 5. **Swing → contact roll** (no strike roll, so a swing never knows if it was a ball): the batter rolls the dice bet on the located card **one at a time**, keeping a running total, up to as many dice as they bet. A 1 ends the swing as a swing and miss (`one_whiffs`). A 6 ends it as a hit, i.e. a ball in play (`six_hits`). Once the total beats difference + multiples bonus, the ball is in play. Running out of dice first = foul. No dice on the located card = swing and miss. More dice means more chances to get there, but also more chances to roll a 1 first.
-6. **Power**: on a ball in play, roll the dice not bet (`power_rule=reserve`) and compare the sum (or the best `power_keep`) to `power_thresholds` (1B / 2B / 3B / HR).
+6. **Power**: on a ball in play, roll the dice not bet (`power_rule=reserve`) and compare the sum (or the best `power_keep`) to `power_thresholds` (1B / 2B / 3B / HR). Two experimental alternatives are behind `power_system` (see below and [power-hands.md](power-hands.md)).
 7. After each pitch, all played cards go face up into rows by suit, and the pitcher draws 3 (`draw_per_pitch`). The batter gets all dice back.
 8. After each at-bat, everything is reshuffled and the pitcher draws 10 again.
 
@@ -65,6 +65,15 @@ Each of these is a lever, so the alternatives can be simulated.
 - `batter_eye`: chance the batter reads the location's **row** before betting.
 - `batter_temp`: noise on the AI's swing/take choice.
 - `command_bonus`: flat add to the pitcher's strike roll.
+- `spread_power`: power-sum pips lost per extra card bet on (default 0; one pip proved too costly).
+
+### Experimental power systems (`power_system`)
+
+Off by default (`sum` is the v2 roll above). To play the climb, pick the `climb_v1` preset (7 dice, 1 re-roll per at-bat, spreading costs re-rolls only). Research and full-game results: [power-hands.md](power-hands.md).
+
+- **`climb`**: on a ball in play, roll up to `hand_dice` (5) power dice one at a time. The streak continues while each die is at least the last. A streak of 3 = 1B, 4 = 2B, 4 rising every die (no ties) = 3B, 5 = HR (`climb_ladder`). The batter starts each at-bat with `rerolls`. Each one re-rolls a die that broke the streak.
+- **`hand`**: Yahtzee-style. The best hand from up to `hand_dice` power dice maps to an outcome via `hand_map` (e.g. `trips=1B,straight=2B,four_kind=3B,full_house=HR`). Each re-roll re-rolls one die, chosen by an exact optimal policy.
+- **Both systems:** spreading costs re-rolls (`reroll_card_cost` per extra card, `reroll_mix_penalty` for 2 or 3 pitch types) on top of any dice costs. Set `card_cost=0` and `mix_penalty=0,0,0` to make re-rolls the only spread cost. `reroll_per_ball` grants re-rolls for taking a ball. Re-rolls left at contact are spent on power.
 
 ## The AI
 
@@ -91,7 +100,7 @@ Presets, both on the default 2×2 grid with `card_cost=1`, `power_keep=4` and `b
 2. **Wrong-card whiffs are now the main strikeout source** (29–35% of swings): dice on a card the pitch didn't target. A 2×2 zone after pitch one is usually 2 cards, and covering both costs a die (`card_cost`).
 3. **The strike roll only happens on a take, so walks depend on swings not being too lucrative.** The batter takes when the strike roll looks likely to fail. If hitting is strong, swinging always wins and walks vanish (the raw lever defaults: .698 BA, 0% BB).
 4. **Spread costs work as written.** `card_cost=1` plus `mix_penalty` 0/1/2: two cards of two suits cost 2 dice. The playtest shows the breakdown, e.g. "−2 dice (1 for 2 cards + 1 for 2 pitch types)".
-5. **Power is still coarse.** Best-4 of d6 (4–24) is the finest scale that works so far. The singles threshold is knife-edge (20 → 21 drops BA from .286 to .170), and triples collapse into HR at 24. Ideas: more power dice kept, a d8 power die, or a separate triple roll.
+5. **Power is still coarse.** Best-4 of d6 (4–24) is the finest scale that works for the sum roll. The singles threshold is knife-edge (20 → 21 drops BA from .286 to .170), and triples collapse into HR at 24. The `climb` power system is the most promising replacement so far: .262/.333/.444 with BB 9.6% at 7 dice and 1 re-roll. See [power-hands.md](power-hands.md).
 6. **The zone is ~2 cards after the first pitches** (`draw − 1`). On 2×2 the first two pitches show 4 cards. The pitch mix is 33/33/33, because suit doesn't change the pitcher's odds. `deck_mix` and `removed_cards` are the levers for a fastball-heavy pitcher.
 
 Zone%, Chase% and Z-Swing% are computed from each pitch's strike chance, since swings never roll it.
@@ -108,6 +117,7 @@ Under v1 the pitch was a strike when the pitch card's suit matched the zone card
 | `cardball/cards.py` | deck, values, cells |
 | `cardball/config.py` | every lever, parsing, presets |
 | `cardball/rules.py` | difficulty, dice odds, power, single-pitch resolution |
+| `cardball/hand.py` | experimental power systems: climb and Yahtzee hands (exact odds, in-game rolls) |
 | `cardball/game.py` | at-bat state machine (hand, deck, played rows, count) |
 | `cardball/ai.py` | pitcher and batter AI |
 | `cardball/sim.py` | simulator, sweeps, tuner, 2026 targets |
